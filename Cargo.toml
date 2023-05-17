@@ -1,0 +1,20 @@
+[package]
+name = "tetris"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies.sdl2]
+version = "0.35"
+default-features = false
+features = ["static-link","use-vcpkg","image","gfx","mixer"]
+
+[dependencies.rand]
+version = "0.8.5"
+
+[package.metadata.vcpkg]
+git = "https://github.com/microsoft/vcpkg"
+tag = "2023.04.15"
+dependencies = ["sdl2", "sdl2-image[libjpeg-turbo,libwebp]", "sdl2-gfx", "sdl2-mixer"]
+
+[package.metadata.vcpkg.target]
+x86_64-pc-windows-msvc = { triplet = "x64-windows-static-md" }

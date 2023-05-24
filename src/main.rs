@@ -1,280 +1,604 @@
+#![windows_subsystem = "windows"]
+
+mod animation;
+mod build_info;
+mod config;
+mod event;
 mod game;
+mod game_input;
+mod high_score;
+mod menu;
+mod menu_input;
+mod player;
+mod scale;
 mod theme;
-mod events;
+mod theme_context;
 
 extern crate sdl2;
 
-use std::cmp::min;
-use std::fmt::Debug;
-use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
-use sdl2::pixels::Color;
-use sdl2::pixels;
-use sdl2::gfx::primitives::DrawRenderer;
-use sdl2::image::InitFlag;
-use sdl2::rect::{Point, Rect};
-use sdl2::render::{BlendMode, Texture, TextureCreator};
-use sdl2::video::WindowContext;
-use events::Events;
-use game::Game;
-use game::block::BlockState;
-use game::board::{BOARD_HEIGHT, BOARD_WIDTH};
-use game::timing::Timing;
-use crate::events::GameEventKey;
-use crate::game::{GameMetrics, GameState};
-use crate::game::random::RandomMode;
-use crate::theme::Theme;
-use crate::theme::game_boy::{GameBoyTheme, GameBoyPalette};
+use crate::animation::game_over::GameOverAnimate;
+use crate::animation::hard_drop::HardDropAnimation;
+use crate::config::{Config, GameConfig, MatchRules, VideoMode};
+use crate::event::GameEvent;
+use crate::game_input::GameInputKey;
+use crate::high_score::entry::HighScoreEntry;
+use crate::high_score::table::HighScoreTable;
+use crate::high_score::view::HighScoreTableView;
+use crate::menu::{Menu, MenuAction};
+use crate::menu_input::{MenuInputContext, MenuInputKey};
+use crate::player::MatchState;
 
-const WINDOW_WIDTH: u32 = 800;
-const WINDOW_HEIGHT: u32 = 600;
-const PLAYERS: u32 = 1;
+use game_input::GameInputContext;
+use player::Match;
+use sdl2::image::{InitFlag as ImageInitFlag, Sdl2ImageContext};
+use sdl2::mixer::{InitFlag as MixerInitFlag, AUDIO_S16LSB, DEFAULT_CHANNELS};
+use sdl2::pixels::Color;
+use sdl2::render::{Texture, TextureCreator, WindowCanvas};
+use sdl2::sys::mixer::MIX_CHANNELS;
+use sdl2::ttf::Sdl2TtfContext;
+use sdl2::video::WindowContext;
+use sdl2::{AudioSubsystem, EventPump, Sdl};
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::time::SystemTime;
+use theme_context::{PlayerTextures, TextureMode, ThemeContext};
+
+const MAX_PLAYERS: u32 = 2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum TextureMode {
-    Player(u32, Rect),
-    Background
+enum MainMenuAction {
+    NewMatch { config: GameConfig },
+    ViewHighScores,
 }
 
-fn scale_rect(rect: Rect, scale: u32) -> Rect {
-    Rect::new(
-        rect.x * scale as i32, rect.y * scale as i32,
-        rect.width() * scale, rect.height() * scale
-    )
+struct TetrisSdl {
+    config: Config,
+    _sdl: Sdl,
+    ttf: Sdl2TtfContext,
+    _image: Sdl2ImageContext,
+    canvas: WindowCanvas,
+    event_pump: EventPump,
+    _audio: AudioSubsystem,
+    texture_creator: TextureCreator<WindowContext>,
 }
 
-fn scale_and_offset_rect(rect: Rect, scale: u32, offset_x: i32, offset_y: i32) -> Rect {
-    Rect::new(
-        rect.x * scale as i32 + offset_x, rect.y * scale as i32 + offset_y,
-        rect.width() * scale, rect.height() * scale
-    )
-}
+impl TetrisSdl {
+    pub fn new() -> Result<Self, String> {
+        let config = Config::load()?;
+        let sdl = sdl2::init()?;
+        let image = sdl2::image::init(ImageInitFlag::PNG)?;
+        let video = sdl.video()?;
+        let ttf = sdl2::ttf::init().map_err(|e| e.to_string())?;
 
-struct Player<'a> {
-    player: u32,
-    board_texture: Texture<'a>,
-    board_snip: Rect
-}
+        // let resolutions: BTreeSet<(i32, i32)> = (0..video.num_display_modes(0)?)
+        //     .into_iter()
+        //     .map(|i| video.display_mode(0, i).unwrap())
+        //     .map(|mode| (mode.w, mode.h))
+        //     .collect();
 
-impl<'a> Player<'a> {
-    fn new(texture_creator: &'a TextureCreator<WindowContext>, player: u32, theme: &dyn Theme) -> Result<Self, String> {
-        let mut board_snip = theme.board_snip(player);
-        let mut texture = texture_creator
-            .create_texture_target(None, board_snip.width(), board_snip.height())
-            .map_err(|e| e.to_string())?;
-        texture.set_blend_mode(BlendMode::Blend);
-        Ok(
-            Self {
-                player,
-                board_texture: texture,
-                board_snip
+        if config.video.disable_screensaver && video.is_screen_saver_enabled() {
+            video.disable_screen_saver();
+        }
+
+        let (width, height) = match config.video.mode {
+            VideoMode::Window { width, height } => (width, height),
+            VideoMode::FullScreen { width, height } => (width, height),
+            _ => (1, 1),
+        };
+
+        let mut window_builder = video.window("Tetris", width, height);
+        match config.video.mode {
+            VideoMode::FullScreen { .. } => {
+                window_builder.fullscreen();
             }
-        )
-    }
-}
+            VideoMode::FullScreenDesktop => {
+                window_builder.fullscreen_desktop();
+            }
+            _ => {}
+        };
 
-struct Games {
-    games: Vec<Game>,
-    paused: bool
-}
+        let canvas_builder = window_builder
+            .position_centered()
+            .opengl()
+            .allow_highdpi()
+            .build()
+            .map_err(|e| e.to_string())?
+            .into_canvas()
+            .target_texture()
+            .accelerated();
 
-impl Games {
-    fn new(players: u32) -> Self {
-        if players == 0 {
-            panic!("must have at least one player")
-        }
-        Self {
-            games: (1..=players)
-                .map(|player| Game::new(player, 0, RandomMode::Bag))
-                .collect::<Vec<Game>>(),
-            paused: false
-        }
-    }
-
-    fn metrics(&self) -> Vec<GameMetrics> {
-        self.games.iter().map(|g| g.metrics()).collect()
-    }
-    
-    fn unset_soft_drop(&mut self) {
-        for game in self.games.iter_mut() {
-            game.set_soft_drop(false);
-        }
-    }
-
-    fn toggle_paused(&mut self) -> Option<bool> {
-        self.paused = !self.paused;
-        Some(self.paused)
-    }
-
-    fn is_paused(&self) -> bool {
-        self.paused
-    }
-
-    fn mut_game<F>(&mut self, player: u32, mut f: F) -> Option<bool>
-            where F: FnMut(&mut Game) -> bool {
-        debug_assert!(player > 0);
-        if self.paused {
-            None
+        let canvas = if config.video.vsync {
+            canvas_builder.present_vsync()
         } else {
-            self.games.get_mut(player as usize - 1).map(f)
+            canvas_builder
         }
+        .build()
+        .map_err(|e| e.to_string())?;
+
+        let texture_creator = canvas.texture_creator();
+        let event_pump = sdl.event_pump()?;
+
+        let audio = sdl.audio()?;
+        sdl2::mixer::open_audio(44_100, AUDIO_S16LSB, DEFAULT_CHANNELS, 512)?;
+        let _mixer_context = sdl2::mixer::init(MixerInitFlag::OGG)?;
+        sdl2::mixer::allocate_channels((MAX_PLAYERS * MIX_CHANNELS) as i32);
+        sdl2::mixer::Music::set_volume(config.audio.music_volume());
+
+        Ok(Self {
+            config,
+            _sdl: sdl,
+            ttf,
+            _image: image,
+            canvas,
+            event_pump,
+            _audio: audio,
+            texture_creator,
+        })
     }
 
-    fn game(&self, player: u32) -> &Game {
-        debug_assert!(player > 0);
-        self.games.get(player as usize - 1).unwrap()
+    pub fn main_menu(&mut self, game_config: Option<GameConfig>) -> Result<Option<MainMenuAction>, String> {
+        let mut game_config = match game_config {
+            None => GameConfig::new(1, 0, MatchRules::Battle),
+            Some(config) => config
+        };
+        let inputs = MenuInputContext::new(self.config.input);
+        let menu_items = vec![
+            (
+                "players",
+                MenuAction::SelectList {
+                    items: vec!["1", "2"],
+                    current: game_config.players as usize - 1,
+                },
+            ),
+            (
+                "mode",
+                MenuAction::SelectList {
+                    items: vec![
+                        "battle",
+                        "40 line sprint",
+                        "10,000 point sprint",
+                        "marathon",
+                    ],
+                    current: match game_config.rules {
+                        MatchRules::Battle => 0,
+                        MatchRules::LineSprint { .. } => 1,
+                        MatchRules::ScoreSprint { .. } => 2,
+                        MatchRules::Marathon => 3
+                    },
+                },
+            ),
+            (
+                "level",
+                MenuAction::SelectList {
+                    items: vec!["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+                    current: game_config.level as usize,
+                },
+            ),
+            ("high scores", MenuAction::Select),
+            ("start", MenuAction::Select),
+            ("quit", MenuAction::Select),
+        ];
+        let mut menu = Menu::new(
+            menu_items,
+            &self.ttf,
+            &self.texture_creator,
+            self.config,
+            self.canvas.window().size(),
+        )?;
+        menu.play_music()?;
+        'menu: loop {
+            let events = inputs.parse(self.event_pump.poll_iter());
+            if events.contains(&MenuInputKey::Quit) {
+                return Ok(None);
+            }
+            if events.contains(&MenuInputKey::Start) {
+                break 'menu;
+            }
+            if !events.is_empty() {
+                menu.play_sound()?;
+            }
+
+            for key in events.into_iter() {
+                match menu.read_key(key) {
+                    None => {}
+                    Some((name, action)) => match name {
+                        "players" => game_config.players = action.parse::<u32>().unwrap(),
+                        "mode" => {
+                            game_config.rules = match action {
+                                "battle" => MatchRules::Battle,
+                                "40 line sprint" => MatchRules::LineSprint { lines: 40 },
+                                "10,000 point sprint" => MatchRules::ScoreSprint { score: 10_000 },
+                                "marathon" => MatchRules::Marathon,
+                                _ => unreachable!(),
+                            }
+                        }
+                        "level" => game_config.level = action.parse::<u32>().unwrap(),
+                        "high scores" => return Ok(Some(MainMenuAction::ViewHighScores)),
+                        "start" => break 'menu,
+                        "quit" => return Ok(None),
+                        _ => {}
+                    },
+                }
+            }
+
+            self.canvas.set_draw_color(Color::BLACK);
+            self.canvas.clear();
+
+            menu.draw(&mut self.canvas)?;
+
+            self.canvas.present();
+        }
+        Ok(Some(MainMenuAction::NewMatch {
+            config: game_config,
+        }))
+    }
+
+    pub fn view_high_score(&mut self) -> Result<(), String> {
+        let inputs = MenuInputContext::new(self.config.input);
+        let high_scores = HighScoreTable::load()?;
+        if high_scores.entries().is_empty() {
+            return Ok(());
+        }
+
+        let mut view = HighScoreTableView::new(
+            high_scores,
+            &self.ttf,
+            &self.texture_creator,
+            self.canvas.window().size(),
+        )?;
+        'menu: loop {
+            let events = inputs.parse(self.event_pump.poll_iter());
+            if !events.is_empty() {
+                // any button press
+                break 'menu;
+            }
+            self.canvas.set_draw_color(Color::BLACK);
+            self.canvas.clear();
+
+            view.draw(&mut self.canvas)?;
+
+            self.canvas.present();
+        }
+        Ok(())
+    }
+
+    pub fn game(&mut self, game_config: GameConfig) -> Result<(), String> {
+        let mut inputs = GameInputContext::new(self.config.input);
+        let mut fixture = Match::new(game_config, self.config);
+        let window_size = self.canvas.window().size();
+        let mut themes = ThemeContext::new(
+            &mut self.canvas,
+            &self.texture_creator,
+            game_config.players,
+            window_size,
+            self.config,
+        )?;
+
+        let mut player_textures = (0..game_config.players)
+            .map(|_| {
+                PlayerTextures::new(
+                    &self.texture_creator,
+                    themes.max_background_size(),
+                    themes.max_board_size(),
+                )
+                .unwrap()
+            })
+            .collect::<Vec<PlayerTextures>>();
+
+        // push mut refs of all textures and their render modes into a single vector so we can render to texture in one loop
+        let mut texture_refs: Vec<(&mut Texture, TextureMode)> = vec![];
+        for (player_index, textures) in player_textures.iter_mut().enumerate() {
+            let player = player_index as u32 + 1;
+            texture_refs.push((
+                &mut textures.background,
+                TextureMode::PlayerBackground(player),
+            ));
+            texture_refs.push((&mut textures.board, TextureMode::PlayerBoard(player)));
+        }
+
+        themes.theme_mut().music().play(-1)?;
+
+        let mut high_score_entry: Option<HighScoreEntry> = None;
+        let mut player_hard_drop_animations: HashMap<u32, HardDropAnimation> = HashMap::new();
+        let mut t0 = SystemTime::now();
+        let mut max_level = 0;
+        'game: loop {
+            let now = SystemTime::now();
+            let delta = now.duration_since(t0).map_err(|e| e.to_string())?;
+            t0 = now;
+
+            fixture.unset_flags();
+            for hard_dropping_player in player_hard_drop_animations.keys() {
+                fixture.set_hard_dropping(*hard_dropping_player);
+            }
+            let events = inputs
+                .update(delta, self.event_pump.poll_iter())
+                .into_iter()
+                .flat_map(|input| match high_score_entry.as_mut() {
+                    None => match input {
+                        GameInputKey::MoveLeft { player } => fixture.mut_game(player, |g| g.left()),
+                        GameInputKey::MoveRight { player } => {
+                            fixture.mut_game(player, |g| g.right())
+                        }
+                        GameInputKey::SoftDrop { player } => {
+                            fixture.mut_game(player, |g| g.set_soft_drop(true))
+                        }
+                        GameInputKey::HardDrop { player } => {
+                            fixture.mut_game(player, |g| g.hard_drop())
+                        }
+                        GameInputKey::RotateClockwise { player } => {
+                            fixture.mut_game(player, |g| g.rotate(true))
+                        }
+                        GameInputKey::RotateAnticlockwise { player } => {
+                            fixture.mut_game(player, |g| g.rotate(false))
+                        }
+                        GameInputKey::Hold { player } => fixture.mut_game(player, |g| g.hold()),
+                        GameInputKey::Pause => match fixture.state() {
+                            MatchState::Normal | MatchState::Paused => fixture.toggle_paused(),
+                            _ => Some(GameEvent::Quit),
+                        },
+                        GameInputKey::Quit => Some(GameEvent::Quit),
+                        GameInputKey::NextTheme => Some(GameEvent::NextTheme),
+                    },
+                    Some(entry) => match input {
+                        GameInputKey::MoveLeft { player } if player == entry.player() => {
+                            entry.left()
+                        }
+                        GameInputKey::MoveRight { player } if player == entry.player() => {
+                            entry.right()
+                        }
+                        GameInputKey::RotateClockwise { player } if player == entry.player() => {
+                            entry.down()
+                        }
+                        GameInputKey::RotateAnticlockwise { player }
+                            if player == entry.player() =>
+                        {
+                            entry.up()
+                        }
+                        GameInputKey::Quit => Some(GameEvent::Quit),
+                        _ => None,
+                    },
+                })
+                .collect::<Vec<GameEvent>>();
+
+            for event in events.iter() {
+                match event {
+                    GameEvent::Quit => break 'game,
+                    GameEvent::Paused => sdl2::mixer::Music::pause(),
+                    GameEvent::UnPaused => sdl2::mixer::Music::resume(),
+                    GameEvent::NextTheme if !fixture.state().is_game_over() => {
+                        themes.start_fade(&mut self.canvas)?;
+                        themes.next();
+
+                        // handle music
+                        match fixture.state() {
+                            MatchState::Normal => {
+                                themes.theme_mut().music().fade_in(-1, 1000)?;
+                            }
+                            MatchState::Paused => {
+                                // switch music but pause it immediately
+                                themes.theme_mut().music().play(-1)?;
+                                sdl2::mixer::Music::pause();
+                            }
+                            _ => {}
+                        }
+                    }
+                    GameEvent::HardDrop {
+                        player: player_id,
+                        minos,
+                        dropped_rows,
+                    } => {
+                        let theme = themes.current();
+                        let mino_rects = theme.mino_rects(*player_id, *minos);
+                        let dropped_pixels = theme.rows_to_pixels(*dropped_rows);
+                        let hard_drop_animation = HardDropAnimation::new(
+                            &self.canvas,
+                            &self.texture_creator,
+                            mino_rects,
+                            dropped_pixels,
+                        )?;
+                        player_hard_drop_animations.insert(*player_id, hard_drop_animation);
+                    }
+                    GameEvent::HighScoreEntry if high_score_entry.is_some() => {
+                        match high_score_entry.unwrap().to_high_score() {
+                            None => {}
+                            Some(high_score) => fixture.save_high_score(high_score)?,
+                        }
+                        break 'game;
+                    }
+                    _ => {}
+                }
+
+                themes.theme_mut().receive_event(*event)?;
+            }
+
+            match fixture.state() {
+                MatchState::GameOver {
+                    high_score: maybe_high_score,
+                } => {
+                    let mut game_over_done = true;
+                    for player in fixture.players.iter_mut() {
+                        match player.update_game_over_animation(delta) {
+                            Some(animation) if animation != GameOverAnimate::Finished => {
+                                game_over_done = false
+                            }
+                            _ => {}
+                        }
+                    }
+                    match maybe_high_score {
+                        Some(high_score) if game_over_done => {
+                            // start high score entry
+                            fixture.set_high_score_entry();
+                            high_score_entry = Some(HighScoreEntry::new(
+                                high_score,
+                                &self.texture_creator,
+                                themes.theme(),
+                                themes.scale(),
+                            )?);
+                        }
+                        _ => {}
+                    }
+                }
+                MatchState::Normal if !themes.is_fading() => {
+                    let mut garbage: Vec<(u32, u32)> = vec![];
+                    let mut new_game_over: Option<u32> = None;
+                    for player in fixture.players.iter_mut() {
+                        if player.update_destroy_animation(delta) {
+                            continue;
+                        }
+                        if player_hard_drop_animations.contains_key(&player.player) {
+                            continue;
+                        }
+                        let event = player.game.update(delta);
+                        if event.is_none() {
+                            continue;
+                        }
+                        match event.unwrap() {
+                            GameEvent::GameOver(_) => {
+                                new_game_over = Some(player.player);
+                            }
+                            GameEvent::Destroy(lines) => {
+                                if lines[0].is_some() {
+                                    player.animate_destroy(
+                                        themes.theme().destroy_animation_type(),
+                                        lines,
+                                    );
+                                }
+                            }
+                            GameEvent::Destroyed {
+                                level_up,
+                                send_garbage_lines,
+                                ..
+                            } => {
+                                if level_up {
+                                    let level = player.game.level();
+                                    if level > max_level {
+                                        // todo option to disable this in config
+                                        max_level = level;
+                                        themes.start_fade(&mut self.canvas)?;
+                                        themes.next();
+                                        themes.theme_mut().music().fade_in(-1, 1000)?;
+                                    }
+                                }
+
+                                if send_garbage_lines > 0 {
+                                    garbage.push((player.player, send_garbage_lines));
+                                }
+                            }
+                            _ => {}
+                        }
+                        themes.theme_mut().receive_event(event.unwrap())?;
+                    }
+
+                    // maybe start game over
+                    if let Some(winner) = fixture.check_for_winning_player() {
+                        sdl2::mixer::Music::halt();
+                        fixture.set_winner(winner, themes.theme().game_over_animation_type());
+                        themes.theme_mut().receive_event(GameEvent::Victory)?;
+                    } else if new_game_over.is_some() {
+                        if let Some(loser) = new_game_over {
+                            sdl2::mixer::Music::halt();
+                            fixture.set_game_over(loser, themes.theme().game_over_animation_type());
+                        } else {
+                            unreachable!();
+                        }
+                    } else {
+                        // maybe send garbage
+                        for (from_player, send_garbage_lines) in garbage {
+                            fixture.send_garbage(from_player, send_garbage_lines);
+                        }
+                    }
+                }
+                _ => {}
+            }
+
+            // draw the game
+            self.canvas
+                .set_draw_color(themes.theme().background_color());
+            self.canvas.clear();
+            self.canvas
+                .with_multiple_texture_canvas(
+                    texture_refs.iter(),
+                    |texture_canvas, texture_mode| match texture_mode {
+                        TextureMode::PlayerBackground(player_id)
+                            if !player_hard_drop_animations.contains_key(player_id) =>
+                        {
+                            let player = fixture.player(*player_id);
+                            themes
+                                .theme_mut()
+                                .draw_background(texture_canvas, &player.game)
+                                .unwrap();
+                        }
+                        TextureMode::PlayerBoard(player_id)
+                            if !player_hard_drop_animations.contains_key(player_id) =>
+                        {
+                            let player = fixture.player(*player_id);
+                            themes
+                                .theme_mut()
+                                .draw_board(
+                                    texture_canvas,
+                                    &player.game,
+                                    player.current_destroy_animation(),
+                                    player.current_game_over_animation(),
+                                )
+                                .unwrap();
+                        }
+                        _ => {}
+                    },
+                )
+                .map_err(|e| e.to_string())?;
+
+            let offsets: Vec<(f64, f64)> = fixture
+                .players
+                .iter_mut()
+                .map(|p| p.next_impact_offset(delta))
+                .collect();
+            themes.draw_current(&mut self.canvas, &mut texture_refs, delta, offsets)?;
+
+            let mut remove_hard_drop_animations: Vec<u32> = vec![];
+            for (player_id, animation) in player_hard_drop_animations.iter_mut() {
+                if !animation.update(&mut self.canvas, delta)? {
+                    remove_hard_drop_animations.push(*player_id);
+                }
+            }
+            for player_id in remove_hard_drop_animations {
+                player_hard_drop_animations.remove(&player_id);
+                fixture.player_mut(player_id).impact()
+            }
+
+            if fixture.state().is_paused() {
+                themes.draw_paused(&mut self.canvas)?;
+            }
+
+            match high_score_entry.as_mut() {
+                None => {}
+                Some(entry) => {
+                    themes.draw_hide_game(&mut self.canvas)?;
+                    entry.draw(&mut self.canvas, themes.theme())?;
+                }
+            }
+
+            self.canvas.present();
+        }
+
+        Ok(())
     }
 }
 
 fn main() -> Result<(), String> {
-    let sdl_context = sdl2::init()?;
-    sdl2::image::init(InitFlag::PNG)?;
-    let video_subsystem = sdl_context.video()?;
-    let window = video_subsystem
-        .window("Tetris", WINDOW_WIDTH, WINDOW_HEIGHT)
-        .position_centered()
-        .opengl()
-        .build()
-        .map_err(|e| e.to_string())?;
-    let (window_width, window_height) = window.size();
-    let mut canvas = window
-        .into_canvas()
-        .target_texture()
-        .accelerated()
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    let mut event_pump = sdl_context.event_pump()?;
-
-    let mut fps = sdl2::gfx::framerate::FPSManager::new();
-    fps.set_framerate(60)?;
-
-    let timing = Timing::new(fps.get_framerate() as u32);
-    let mut events = Events::new();
-
-    let texture_creator = canvas.texture_creator();
-    let theme = GameBoyTheme::new(PLAYERS, &mut canvas, &texture_creator, GameBoyPalette::GameBoyLight)?;
-    let (bg_width, bg_height) = theme.background_size();
-
-    // find best integer scale
-    let scale = min(window_width / bg_width, window_height / bg_height);
-
-    let mut bg_rect = scale_rect(Rect::new(0, 0, bg_width, bg_height), scale);
-    bg_rect.center_on((window_width as i32 / 2, window_height as i32 / 2));
-    let mut bg_texture = texture_creator
-        .create_texture_target(None, bg_width, bg_height)
-        .map_err(|e| e.to_string())?;
-    bg_texture.set_blend_mode(BlendMode::Blend);
-
-    let mut players = (1..=PLAYERS)
-        .map(|player| Player::new(&texture_creator, player, &theme).unwrap())
-        .collect::<Vec<Player>>();
-
-    let mut games = Games::new(PLAYERS);
-
-    // push mut refs of all textures and their render modes into a single vector so we can render to texture in one loop
-    let mut texture_refs: Vec<(&mut Texture, TextureMode)> = vec![
-        (&mut bg_texture, TextureMode::Background)
-    ];
-
-    for player in players.iter_mut() {
-        let scaled_board_rect = scale_and_offset_rect(player.board_snip, scale, bg_rect.x(), bg_rect.y());
-        texture_refs.push(
-            (&mut player.board_texture, TextureMode::Player(player.player, scaled_board_rect))
-        )
+    let mut last_game_config: Option<GameConfig> = None;
+    let mut tetris = TetrisSdl::new()?;
+    loop {
+        match tetris.main_menu(last_game_config)? {
+            Some(MainMenuAction::NewMatch { config }) => {
+                last_game_config = Some(config);
+                tetris.game(config)?;
+            },
+            Some(MainMenuAction::ViewHighScores) => tetris.view_high_score()?,
+            _ => {
+                break;
+            }
+        }
     }
-
-    let mut lighten_screen = texture_creator
-        .create_texture_target(None, bg_rect.width(), bg_rect.height())
-        .map_err(|e| e.to_string())?;
-    lighten_screen.set_blend_mode(BlendMode::Blend);
-    canvas.with_texture_canvas(&mut lighten_screen, |texture_canvas| {
-        texture_canvas.set_draw_color(Color::RGBA(255, 255, 255, 150));
-        texture_canvas.fill_rect(Rect::new(0, 0, bg_rect.width(), bg_rect.height())).unwrap();
-    }).map_err(|e| e.to_string())?;
-
-
-    canvas.set_draw_color(Color::WHITE); // todo take from theme
-    canvas.clear();
-    canvas.present();
-
-    'main: loop {
-        let delta = timing.frame_duration(1);
-
-        games.unset_soft_drop();
-
-        for event in events.update(delta, event_pump.poll_iter()) {
-            // TODO emit the events here so we can play sound effects for them in the theme
-            let success = match event {
-                GameEventKey::MoveLeft { player } => games.mut_game(player, |g| g.left()),
-                GameEventKey::MoveRight { player } => games.mut_game(player, |g| g.right()),
-                GameEventKey::SoftDrop { player } => games.mut_game(player, |g| g.set_soft_drop(true)),
-                GameEventKey::HardDrop { player } => games.mut_game(player, |g| g.hard_drop()),
-                GameEventKey::RotateClockwise { player } => games.mut_game(player, |g| g.rotate(true)),
-                GameEventKey::RotateAnticlockwise { player } => games.mut_game(player, |g| g.rotate(false)),
-                GameEventKey::Hold { player } => games.mut_game(player, |g| g.hold()),
-                GameEventKey::Pause => games.toggle_paused(),
-                GameEventKey::Quit => { break 'main; }
-            }.unwrap_or(false);
-        }
-
-        if !games.paused {
-            for game in games.games.iter_mut() {
-                match game.update(delta) {
-                    GameState::GameOver(_) => {
-                        // TODO game over screen
-                        println!("GAME OVER player {}", game.player());
-                        break 'main;
-                    },
-                    GameState::Destroy(pattern) => {
-                        // TODO send garbage
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        let game_metrics = games.metrics();
-
-        // draw the game
-        canvas.set_draw_color(Color::WHITE); // todo take from theme
-        canvas.clear();
-        canvas.with_multiple_texture_canvas(texture_refs.iter(), |texture_canvas, texture_mode| {
-            match texture_mode {
-                TextureMode::Player(player, _) => {
-                    theme.draw_board(texture_canvas, games.game(*player)).unwrap();
-                }
-                TextureMode::Background => {
-                    theme.draw_background(texture_canvas, &game_metrics).unwrap();
-                }
-            }
-        }).map_err(|e| e.to_string())?;
-
-        for (texture, texture_mode) in texture_refs.iter_mut() {
-            match texture_mode {
-                TextureMode::Player(_, rect) => {
-                    // the game board is always rendered upside down as the game impl has a reversed y coordinate system to sdl
-                    canvas.copy_ex(texture, None, *rect, 0.0, None, false, true)?;
-                },
-                TextureMode::Background => {
-                   canvas.copy(texture, None, bg_rect)?;
-                }
-            }
-        }
-
-        if games.is_paused() {
-            canvas.copy(&lighten_screen, None, bg_rect)?;
-
-            let texture = theme.pause_texture();
-            let query = texture.query();
-            let mut paused_rect = scale_rect(Rect::new(0, 0, query.width, query.height), scale);
-            paused_rect.center_on(bg_rect.center());
-            canvas.copy(texture, None, paused_rect)?;
-        }
-
-        canvas.present();
-        fps.delay(); // todo probably need to update fps timing
-    }
-
     Ok(())
 }

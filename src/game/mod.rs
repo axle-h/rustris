@@ -1,30 +1,28 @@
-use std::collections::HashMap;
-use std::cmp::min;
-use std::thread::spawn;
-use std::time::Duration;
-use sdl2::init;
-use board::Board;
-use tetromino::TetrominoShape;
-use geometry::Point;
-use timing::Timing;
+use crate::event::{GameEvent, GameOverCondition};
 use crate::game::block::BlockState;
-use crate::game::random::{PEEK_SIZE, RandomMode, RandomTetromino};
-use super::game::board::DestroyPattern;
+use crate::game::board::DestroyLines;
+use crate::game::random::{RandomTetromino, PEEK_SIZE};
+use board::Board;
 
-pub mod board;
-pub mod tetromino;
-pub mod geometry;
+use std::cmp::{max, min};
+
+use std::time::Duration;
+use tetromino::TetrominoShape;
+
 pub mod block;
-pub mod timing;
+pub mod board;
+pub mod geometry;
 pub mod random;
+pub mod tetromino;
 
 const LINES_PER_LEVEL: u32 = 10;
 const SOFT_DROP_STEP_FACTOR: u32 = 20;
 const SOFT_DROP_SPAWN_FACTOR: u32 = 10;
 const MIN_SPAWN_DELAY: Duration = Duration::from_millis(500);
 const LOCK_DURATION: Duration = Duration::from_millis(500);
-const SOFT_DROP_LOCK_DURATION: Duration = Duration::from_millis(500 / 20);
+const SOFT_DROP_LOCK_DURATION: Duration = Duration::from_millis(500 / 2);
 const MAX_LOCK_PLACEMENTS: u32 = 15;
+const GARBAGE_WAIT: Duration = Duration::from_millis(50);
 
 const SINGLE_POINTS: u32 = 100;
 const DOUBLE_POINTS: u32 = 300;
@@ -54,41 +52,35 @@ const STEP_13: Duration = Duration::from_millis(11);
 const STEP_14: Duration = Duration::from_millis(7);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum GameOverCondition {
-    /// Top Out: An opponent’s Line Attacks force existing Blocks past the top of the Buffer Zone
-    TopOut,
-    /// Lock Out: The player locks a whole Tetrimino down above the Skyline
-    LockOut,
-    /// Block Out: One of the starting cells of the Next Tetrimino is blocked by an existing Block
-    BlockOut
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GameState {
     Spawn(Duration, TetrominoShape),
     Fall(Duration),
     Lock(Duration),
-    Pattern, // check the board for patterns to destroy e.g. lines
-    Destroy(DestroyPattern), // destroy marked patterns
-    GameOver(GameOverCondition)
+    Pattern,               // check the board for patterns to destroy e.g. lines
+    Destroy(DestroyLines), // destroy marked patterns
+    GameOver,
+    SpawnGarbage {
+        duration: Duration,
+        next_shape: TetrominoShape,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Combo {
     count: u32,
-    difficult: bool
+    difficult: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct HoldState {
     shape: TetrominoShape,
-    locked: bool
+    locked: bool,
 }
 
 pub struct Game {
     player: u32,
     board: Board,
-    random: Box<dyn RandomTetromino>,
+    random: RandomTetromino,
     level: u32,
     lines: u32,
     score: u32,
@@ -97,7 +89,7 @@ pub struct Game {
     soft_drop: bool,
     skip_next_spawn_delay: bool,
     hold: Option<HoldState>,
-
+    garbage_buffer: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -108,12 +100,11 @@ pub struct GameMetrics {
     pub score: u32,
     pub combo: Option<Combo>,
     pub queue: [TetrominoShape; PEEK_SIZE],
-    pub hold: Option<TetrominoShape>
+    pub hold: Option<TetrominoShape>,
 }
 
 impl Game {
-    pub fn new(player: u32, level: u32, random_mode: RandomMode) -> Game {
-        let mut random = random_mode.build();
+    pub fn new(player: u32, level: u32, mut random: RandomTetromino) -> Game {
         let first_shape = random.next();
         Game {
             player,
@@ -126,21 +117,27 @@ impl Game {
             state: GameState::Spawn(Duration::ZERO, first_shape),
             soft_drop: false,
             skip_next_spawn_delay: false,
-            hold: None
+            hold: None,
+            garbage_buffer: 0,
         }
     }
 
-    pub fn hold(&mut self) -> bool {
+    pub fn level(&self) -> u32 {
+        self.level
+    }
+
+    pub fn hold(&mut self) -> Option<GameEvent> {
         if !(matches!(self.state, GameState::Fall(_))
-            || matches!(self.state, GameState::Lock(duration) if duration < LOCK_DURATION)) ||
-            matches!(self.hold, Some(HoldState { locked: true, .. })) {
+            || matches!(self.state, GameState::Lock(duration) if duration < LOCK_DURATION))
+            || matches!(self.hold, Some(HoldState { locked: true, .. }))
+        {
             // hold is blocked
-            return false;
+            return None;
         }
 
         let held_shape = match self.board.hold() {
-            None => return false,
-            Some(shape) => shape
+            None => return None,
+            Some(shape) => shape,
         };
 
         let next_shape = match self.hold {
@@ -149,29 +146,33 @@ impl Game {
         };
 
         self.state = GameState::Spawn(MIN_SPAWN_DELAY, next_shape);
-        self.hold = Some(HoldState { locked: true, shape: held_shape });
-        return true;
+        self.hold = Some(HoldState {
+            locked: true,
+            shape: held_shape,
+        });
+        Some(GameEvent::Hold)
     }
 
-    pub fn set_soft_drop(&mut self, soft_drop: bool) -> bool {
+    pub fn set_soft_drop(&mut self, soft_drop: bool) -> Option<GameEvent> {
         self.soft_drop = soft_drop;
-        soft_drop
-    }
-
-    pub fn hard_drop(&mut self) -> bool {
-        match self.board.hard_drop() {
-            None => false,
-            Some(hard_dropped_rows) => {
-                self.state = GameState::Lock(LOCK_DURATION);
-                self.score += hard_dropped_rows * HARD_DROP_POINTS_PER_ROW;
-                self.skip_next_spawn_delay = true;
-                true
-            }
+        if soft_drop {
+            Some(GameEvent::SoftDrop)
+        } else {
+            None
         }
     }
 
-    pub fn player(&self) -> u32 {
-        self.player
+    pub fn hard_drop(&mut self) -> Option<GameEvent> {
+        self.board.hard_drop().map(|(hard_dropped_rows, minos)| {
+            self.state = GameState::Lock(LOCK_DURATION);
+            self.score += hard_dropped_rows * HARD_DROP_POINTS_PER_ROW;
+            self.skip_next_spawn_delay = true;
+            GameEvent::HardDrop {
+                player: self.player,
+                minos,
+                dropped_rows: hard_dropped_rows,
+            }
+        })
     }
 
     pub fn metrics(&self) -> GameMetrics {
@@ -182,23 +183,42 @@ impl Game {
             score: self.score,
             combo: self.combo,
             queue: self.random.peek(),
-            hold: self.hold.map(|h| h.shape)
+            hold: self.hold.map(|h| h.shape),
         }
     }
 
-    pub fn left(&mut self) -> bool {
-        self.with_checking_lock(|board| board.left())
+    pub fn left(&mut self) -> Option<GameEvent> {
+        if self.with_checking_lock(|board| board.left()) {
+            Some(GameEvent::Move)
+        } else {
+            None
+        }
     }
 
-    pub fn right(&mut self) -> bool {
-        self.with_checking_lock(|board| board.right())
+    pub fn right(&mut self) -> Option<GameEvent> {
+        if self.with_checking_lock(|board| board.right()) {
+            Some(GameEvent::Move)
+        } else {
+            None
+        }
     }
 
-    pub fn rotate(&mut self, clockwise: bool) -> bool {
-        self.with_checking_lock(|board| board.rotate(clockwise))
+    pub fn rotate(&mut self, clockwise: bool) -> Option<GameEvent> {
+        if self.with_checking_lock(|board| board.rotate(clockwise)) {
+            Some(GameEvent::Rotate)
+        } else {
+            None
+        }
     }
 
-    fn with_checking_lock<F>(&mut self, mut f: F) -> bool where F: FnMut(&mut Board) -> bool {
+    pub fn send_garbage(&mut self, rows: u32) {
+        self.garbage_buffer += rows;
+    }
+
+    fn with_checking_lock<F>(&mut self, mut f: F) -> bool
+    where
+        F: FnMut(&mut Board) -> bool,
+    {
         match self.state {
             GameState::Lock(lock_duration) => {
                 // 1. check if the lock is already breached (we send movements before a lock update)
@@ -217,51 +237,73 @@ impl Game {
                 }
                 if self.board.register_lock_placement() < MAX_LOCK_PLACEMENTS {
                     // movement is allowed under lock, lock is reset
-                    self.state = GameState::Lock(Duration::ZERO);
+                    self.state = GameState::Fall(Duration::ZERO);
                 } else {
                     // the tetromino just ran out of lock movements, lock it asap
                     self.state = GameState::Lock(LOCK_DURATION);
                 }
-                return true;
+                true
             }
-            _ => f(&mut self.board) // not in lock state, pass through closure
+            _ => f(&mut self.board), // not in lock state, pass through closure
         }
     }
 
-    pub fn update(&mut self, delta: Duration) -> GameState {
-        let state = match self.state {
+    pub fn update(&mut self, delta: Duration) -> Option<GameEvent> {
+        let (state, event) = match self.state {
             GameState::Spawn(duration, shape) => self.spawn(duration + delta, shape),
             GameState::Fall(duration) => self.fall(duration + delta),
             GameState::Lock(duration) => self.lock(duration + delta),
             GameState::Pattern => self.pattern(),
             GameState::Destroy(pattern) => self.destroy(pattern),
-            GameState::GameOver(condition) => GameState::GameOver(condition)
+            GameState::SpawnGarbage {
+                duration,
+                next_shape,
+            } => self.spawn_garbage(duration + delta, next_shape),
+            GameState::GameOver => (GameState::GameOver, None),
         };
         self.state = state;
-        state
+        event
     }
 
-    fn spawn(&mut self, duration: Duration, shape: TetrominoShape) -> GameState {
-        if !self.skip_next_spawn_delay && duration < self.spawn_delay() {
-            return GameState::Spawn(duration, shape);
+    fn spawn(
+        &mut self,
+        duration: Duration,
+        shape: TetrominoShape,
+    ) -> (GameState, Option<GameEvent>) {
+        if self.garbage_buffer > 0 {
+            return (
+                GameState::SpawnGarbage {
+                    duration: Duration::ZERO,
+                    next_shape: shape,
+                },
+                Some(GameEvent::ReceivedGarbage),
+            );
         }
 
+        if !self.skip_next_spawn_delay && duration < self.spawn_delay() {
+            return (GameState::Spawn(duration, shape), None);
+        }
+
+        self.skip_next_spawn_delay = false;
         if self.board.try_spawn_tetromino(shape) {
-            GameState::Fall(Duration::ZERO)
+            (GameState::Fall(Duration::ZERO), Some(GameEvent::Spawn))
         } else {
             // cannot spawn a tetromino is a game over event
-            GameState::GameOver(GameOverCondition::BlockOut)
+            (
+                GameState::GameOver,
+                Some(GameEvent::GameOver(GameOverCondition::BlockOut)),
+            )
         }
     }
 
-    fn fall(&mut self, duration: Duration) -> GameState {
+    fn fall(&mut self, duration: Duration) -> (GameState, Option<GameEvent>) {
         if duration < self.step_delay() {
-            return GameState::Fall(duration);
+            return (GameState::Fall(duration), None);
         }
 
         if !self.board.step_down() {
             // cannot step down, start lock
-            return GameState::Lock(Duration::ZERO)
+            return (GameState::Lock(Duration::ZERO), None);
         }
 
         // has stepped down one row, update score if soft dropping
@@ -271,94 +313,179 @@ impl Game {
 
         if self.board.is_collision() {
             // step has caused a collision, start a lock
-            if self.board.lock_placements() >= MAX_LOCK_PLACEMENTS {
+            let state = if self.board.lock_placements() >= MAX_LOCK_PLACEMENTS {
                 // lock asap
                 GameState::Lock(LOCK_DURATION)
             } else {
                 GameState::Lock(Duration::ZERO)
-            }
+            };
+            (state, Some(GameEvent::Fall))
         } else {
             // no collisions, start a new fall step
-            GameState::Fall(Duration::ZERO)
+            (GameState::Fall(Duration::ZERO), Some(GameEvent::Fall))
         }
     }
 
-    fn lock(&mut self, duration: Duration) -> GameState {
-        let max_lock_duration = if self.soft_drop { SOFT_DROP_LOCK_DURATION } else { LOCK_DURATION };
+    fn lock(&mut self, duration: Duration) -> (GameState, Option<GameEvent>) {
+        let max_lock_duration = if self.soft_drop {
+            SOFT_DROP_LOCK_DURATION
+        } else {
+            LOCK_DURATION
+        };
         if duration < max_lock_duration {
-            GameState::Lock(duration)
+            (GameState::Lock(duration), None)
         } else if self.board.is_collision() {
             // lock timeout and still colliding so lock the piece now
+            // but before locking, need to check for a game over event.
+            let is_lock_out = self.board.is_tetromino_above_skyline();
+
             self.board.lock();
             // maybe unlock hold
             match self.hold {
                 Some(HoldState { locked, shape }) if locked => {
-                    self.hold = Some(HoldState { locked: false, shape });
-                },
+                    self.hold = Some(HoldState {
+                        locked: false,
+                        shape,
+                    });
+                }
                 _ => {}
             }
-            // todo check for LockOut game over pattern here
-            GameState::Pattern
+
+            if is_lock_out {
+                (
+                    GameState::GameOver,
+                    Some(GameEvent::GameOver(GameOverCondition::LockOut)),
+                )
+            } else {
+                (GameState::Pattern, Some(GameEvent::Lock))
+            }
         } else {
             // otherwise must've moved over empty space so start a new fall
-            GameState::Fall(Duration::ZERO)
+            (GameState::Fall(Duration::ZERO), None)
         }
     }
 
-    fn pattern(&mut self) -> GameState {
-        GameState::Destroy(self.board.pattern())
+    fn pattern(&mut self) -> (GameState, Option<GameEvent>) {
+        // TODO t-spin garbage
+        let lines = self.board.pattern();
+        (GameState::Destroy(lines), Some(GameEvent::Destroy(lines)))
     }
 
-    fn destroy(&mut self, pattern: DestroyPattern) -> GameState {
-        self.board.destroy(pattern);
-        self.update_score(pattern);
-        GameState::Spawn(Duration::ZERO, self.random.next())
+    fn destroy(&mut self, lines: DestroyLines) -> (GameState, Option<GameEvent>) {
+        self.board.destroy(lines);
+        let event = self.update_score_and_get_garbage_to_send(lines);
+        (
+            GameState::Spawn(Duration::ZERO, self.random.next()),
+            Some(event),
+        )
     }
 
-    fn update_score(&mut self, pattern: DestroyPattern) {
+    fn spawn_garbage(
+        &mut self,
+        duration: Duration,
+        next_shape: TetrominoShape,
+    ) -> (GameState, Option<GameEvent>) {
+        if duration < GARBAGE_WAIT {
+            return (
+                GameState::SpawnGarbage {
+                    duration,
+                    next_shape,
+                },
+                None,
+            );
+        }
+
+        let hole = self.random.next_garbage_hole();
+        self.board.send_garbage(hole);
+
+        if self.board.is_stack_above_skyline() {
+            // TopOut
+            return (
+                GameState::GameOver,
+                Some(GameEvent::GameOver(GameOverCondition::TopOut)),
+            );
+        }
+
+        self.garbage_buffer -= 1;
+        if self.garbage_buffer == 0 {
+            self.skip_next_spawn_delay = true;
+            (GameState::Spawn(Duration::ZERO, next_shape), None)
+        } else {
+            (
+                GameState::SpawnGarbage {
+                    duration: Duration::ZERO,
+                    next_shape,
+                },
+                None,
+            )
+        }
+    }
+
+    fn update_score_and_get_garbage_to_send(&mut self, pattern: DestroyLines) -> GameEvent {
         // TODO test
         // todo t-spin
+        // todo perfect clear
 
-        let (action_score, lines, action_difficult) = match pattern {
-            DestroyPattern::None => (0, 0, false),
-            DestroyPattern::Single(_) => (SINGLE_POINTS, 1, false),
-            DestroyPattern::Double(_) => (DOUBLE_POINTS, 2, false),
-            DestroyPattern::Triple(_) => (TRIPLE_POINTS, 3, false),
-            DestroyPattern::Tetris(_) => (TETRIS_POINTS, 4, true)
+        let line_count = pattern.iter().filter(|y| y.is_some()).count() as u32;
+
+        let (action_score, action_difficult, garbage_lines) = match line_count {
+            0 => {
+                self.combo = None;
+                return GameEvent::Destroyed {
+                    lines: pattern,
+                    send_garbage_lines: 0,
+                    level_up: false,
+                };
+            }
+            1 => (SINGLE_POINTS, false, 0),
+            2 => (DOUBLE_POINTS, false, 1),
+            3 => (TRIPLE_POINTS, false, 2),
+            4 => (TETRIS_POINTS, true, 4),
+            _ => unreachable!(),
         };
-
-        if action_score == 0 {
-            self.combo = None;
-            return;
-        }
 
         // update combo
         self.combo = match self.combo {
-            None => Some(Combo { count: 0, difficult: action_difficult }),
-            Some(Combo { count, difficult }) => Some(Combo { count: count + 1, difficult: difficult && action_difficult }),
+            None => Some(Combo {
+                count: 0,
+                difficult: action_difficult,
+            }),
+            Some(Combo { count, difficult }) => Some(Combo {
+                count: count + 1,
+                difficult: difficult && action_difficult,
+            }),
         };
 
         // calculate score delta
         let level_multiplier = self.level + 1;
-        let difficult_multiplier = match self.combo {
+        let (difficult_score_multiplier, difficult_garbage_lines) = match self.combo {
             // back to back difficult clears get a 1.5x multiplier
-            Some(Combo { count, difficult} ) if count > 0 && difficult => DIFFICULT_MULTIPLIER,
-            _ => 1.0
+            Some(Combo { count, difficult }) if count > 0 && difficult => (DIFFICULT_MULTIPLIER, 1),
+            _ => (1.0, 0),
         };
         let combo_score = match self.combo {
-            Some (Combo { count, .. }) if count > 0 => COMBO_POINTS * count,
-            _ => 0
+            Some(Combo { count, .. }) if count > 0 => COMBO_POINTS * count,
+            _ => 0,
         };
-        let score_delta = action_score as f64 * level_multiplier as f64 * difficult_multiplier + combo_score as f64;
+        let score_delta =
+            action_score as f64 * level_multiplier as f64 * difficult_score_multiplier
+                + combo_score as f64;
 
         // update score
         self.score += score_delta.round() as u32;
 
         // update level
-        self.lines += lines;
+        self.lines += line_count;
         let line_level = self.lines / LINES_PER_LEVEL;
-        if line_level > self.level {
+        let level_up = line_level > self.level;
+        if level_up {
             self.level = line_level;
+        }
+
+        GameEvent::Destroyed {
+            lines: pattern,
+            send_garbage_lines: garbage_lines + difficult_garbage_lines,
+            level_up,
         }
     }
 
@@ -392,6 +519,11 @@ impl Game {
             13 => STEP_13,
             _ => STEP_14,
         };
-        if self.soft_drop { base / soft_drop_factor } else { base }
+
+        if self.soft_drop {
+            max(base / soft_drop_factor, STEP_14)
+        } else {
+            base
+        }
     }
 }

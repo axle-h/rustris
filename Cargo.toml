@@ -1,20 +1,37 @@
 [package]
-name = "tetris"
-version = "0.1.0"
+name = "rustic-tetris"
+authors = ["Alex Haslehurst"]
+version = "1.0.0"
 edition = "2021"
-
-[dependencies.sdl2]
-version = "0.35"
-default-features = false
-features = ["static-link","use-vcpkg","image","gfx","mixer"]
-
-[dependencies.rand]
-version = "0.8.5"
+resolver = "2"
 
 [package.metadata.vcpkg]
 git = "https://github.com/microsoft/vcpkg"
 tag = "2023.04.15"
-dependencies = ["sdl2", "sdl2-image[libjpeg-turbo,libwebp]", "sdl2-gfx", "sdl2-mixer"]
+dependencies = ["sdl2", "sdl2-image", "sdl2-gfx", "sdl2-mixer", "sdl2-ttf"]
 
 [package.metadata.vcpkg.target]
 x86_64-pc-windows-msvc = { triplet = "x64-windows-static-md" }
+
+[build-dependencies]
+build-info-build = "0.0.31"
+
+[dependencies]
+rand = "0.8.5"
+rand_chacha = "0.3.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_derive = "1.0.163"
+build-info = { version = "0.0.31", features = [] }
+
+[dependencies.sdl2]
+version = "0.35"
+default-features = false
+features = ["static-link","use-vcpkg","image","gfx","mixer", "ttf"]
+
+[dependencies.confy]
+version = "0.5.1"
+features = ["yaml_conf"]
+default-features = false
+
+[profile.release]
+strip = "symbols"

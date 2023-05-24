@@ -1,30 +1,41 @@
-use std::f64::consts::PI;
 use std::fmt::{Display, Formatter};
 use std::ops::{Add, AddAssign, Neg, Sub};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Point { pub x: i32, pub y: i32 }
+pub struct Point {
+    pub x: i32,
+    pub y: i32,
+}
 
 impl Display for Point {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        return write!(f, "Point {{ x: {}, y: {} }}", self.x, self.y);
+        write!(f, "Point {{ x: {}, y: {} }}", self.x, self.y)
     }
 }
 
 impl Point {
     pub const fn new(x: i32, y: i32) -> Point {
-        return Point { x, y }
+        Point { x, y }
     }
 
     pub fn translate(&self, x: i32, y: i32) -> Point {
-        return Point { x: self.x + x, y: self.y + y };
+        Point {
+            x: self.x + x,
+            y: self.y + y,
+        }
     }
 
     pub fn rotate(&self, clockwise: bool) -> Point {
         if clockwise {
-            Point { x: self.y, y: -self.x }
+            Point {
+                x: self.y,
+                y: -self.x,
+            }
         } else {
-            Point { x: -self.y, y: self.x }
+            Point {
+                x: -self.y,
+                y: self.x,
+            }
         }
     }
 }
@@ -61,14 +72,43 @@ impl AddAssign for Point {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Rotation { North, East, South, West }
+pub enum Rotation {
+    North,
+    East,
+    South,
+    West,
+}
 impl Rotation {
     pub fn rotate(&self, clockwise: bool) -> Rotation {
         match self {
-            Rotation::North => if clockwise { Rotation::East } else { Rotation::West },
-            Rotation::East => if clockwise { Rotation::South } else { Rotation::North },
-            Rotation::South => if clockwise { Rotation::West } else { Rotation::East },
-            Rotation::West => if clockwise { Rotation::North } else { Rotation::South }
+            Rotation::North => {
+                if clockwise {
+                    Rotation::East
+                } else {
+                    Rotation::West
+                }
+            }
+            Rotation::East => {
+                if clockwise {
+                    Rotation::South
+                } else {
+                    Rotation::North
+                }
+            }
+            Rotation::South => {
+                if clockwise {
+                    Rotation::West
+                } else {
+                    Rotation::East
+                }
+            }
+            Rotation::West => {
+                if clockwise {
+                    Rotation::North
+                } else {
+                    Rotation::South
+                }
+            }
         }
     }
     pub fn angle(&self) -> f64 {
@@ -82,7 +122,7 @@ impl Rotation {
             Rotation::North => 0.0,
             Rotation::East => 90.0,
             Rotation::South => 180.0,
-            Rotation::West => 270.0
+            Rotation::West => 270.0,
         }
     }
 }

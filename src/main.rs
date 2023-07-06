@@ -14,17 +14,17 @@ mod scale;
 mod theme;
 mod theme_context;
 mod particles;
+mod font;
 
 extern crate sdl2;
 
 use crate::animation::game_over::GameOverAnimate;
 use crate::animation::hard_drop::HardDropAnimation;
 use crate::config::{Config, GameConfig, MatchRules, VideoMode};
-use crate::event::GameEvent;
+use crate::event::{GameEvent, HighScoreEntryEvent};
 use crate::game_input::GameInputKey;
-use crate::high_score::entry::HighScoreEntry;
 use crate::high_score::table::HighScoreTable;
-use crate::high_score::view::HighScoreTableView;
+use crate::high_score::render::HighScoreRender;
 use crate::menu::{Menu, MenuAction};
 use crate::menu_input::{MenuInputContext, MenuInputKey};
 use crate::player::MatchState;
@@ -32,7 +32,7 @@ use crate::player::MatchState;
 use game_input::GameInputContext;
 use player::Match;
 use sdl2::image::{InitFlag as ImageInitFlag, Sdl2ImageContext};
-use sdl2::mixer::{InitFlag as MixerInitFlag, AUDIO_S16LSB, DEFAULT_CHANNELS};
+use sdl2::mixer::{InitFlag as MixerInitFlag, AUDIO_S16LSB, DEFAULT_CHANNELS, Music};
 use sdl2::pixels::Color;
 use sdl2::render::{Texture, TextureCreator, WindowCanvas};
 use sdl2::sys::mixer::MIX_CHANNELS;
@@ -44,6 +44,7 @@ use std::fmt::Debug;
 use std::time::{Duration, SystemTime};
 use sdl2::rect::Rect;
 use theme_context::{PlayerTextures, TextureMode, ThemeContext};
+use crate::high_score::NewHighScore;
 use crate::particles::geometry::PointF;
 use crate::particles::Particles;
 use crate::particles::render::ParticleRender;
@@ -191,7 +192,9 @@ impl TetrisSdl {
             self.config,
             self.canvas.window().size(),
         )?;
-        menu.play_music()?;
+
+        let music = Music::from_file("resource/menu/main-menu.ogg")?;
+        music.play(-1)?;
         'menu: loop {
             let events = inputs.parse(self.event_pump.poll_iter());
             if events.contains(&MenuInputKey::Quit) {
@@ -246,12 +249,16 @@ impl TetrisSdl {
             return Ok(());
         }
 
-        let mut view = HighScoreTableView::new(
+        let mut view = HighScoreRender::new(
             high_scores,
             &self.ttf,
             &self.texture_creator,
             self.canvas.window().size(),
+            None
         )?;
+
+        let music = Music::from_file("resource/menu/high-score.ogg")?;
+        music.play(-1)?;
         'menu: loop {
             let events = inputs.parse(self.event_pump.poll_iter());
             if !events.is_empty() {
@@ -268,7 +275,63 @@ impl TetrisSdl {
         Ok(())
     }
 
-    pub fn game(&mut self, game_config: GameConfig) -> Result<(), String> {
+    pub fn new_high_score(&mut self, new_high_score: NewHighScore) -> Result<(), String> {
+        let inputs = MenuInputContext::new(self.config.input);
+        let high_scores = HighScoreTable::load()?;
+        if high_scores.entries().is_empty() {
+            return Ok(());
+        }
+
+        let mut table = HighScoreRender::new(
+            high_scores,
+            &self.ttf,
+            &self.texture_creator,
+            self.canvas.window().size(),
+            Some(new_high_score)
+        )?;
+        let music = Music::from_file("resource/menu/high-score.ogg")?;
+        music.play(-1)?;
+        'menu: loop {
+            for key in inputs.parse(self.event_pump.poll_iter()) {
+                let event = match key {
+                    MenuInputKey::Up => table.up(),
+                    MenuInputKey::Down => table.down(),
+                    MenuInputKey::Left => table.left(),
+                    MenuInputKey::Right => table.right(),
+                    MenuInputKey::Start => break 'menu,
+                    MenuInputKey::Quit => return Ok(()),
+                    _ => None
+                };
+                if event.is_none() {
+                    continue;
+                }
+                // TODO play a sound on cursor move
+                match event.unwrap() {
+                    HighScoreEntryEvent::CursorRight => {}
+                    HighScoreEntryEvent::CursorLeft => {}
+                    HighScoreEntryEvent::ChangeChar => {}
+                    HighScoreEntryEvent::Finished => break 'menu,
+                }
+            };
+
+            self.canvas.set_draw_color(Color::BLACK);
+            self.canvas.clear();
+
+            table.draw(&mut self.canvas)?;
+
+            self.canvas.present();
+        }
+
+        if let Some(new_entry) = table.new_entry() {
+            let mut high_scores = HighScoreTable::load().unwrap();
+            high_scores.add_high_score(new_entry);
+            high_scores.save()
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn game(&mut self, game_config: GameConfig) -> Result<Option<NewHighScore>, String> {
         let mut inputs = GameInputContext::new(self.config.input);
         let mut fixture = Match::new(game_config, self.config);
         let window_size = self.canvas.window().size();
@@ -307,7 +370,6 @@ impl TetrisSdl {
 
         themes.theme_mut().music().play(-1)?;
 
-        let mut high_score_entry: Option<HighScoreEntry> = None;
         let mut player_hard_drop_animations: HashMap<u32, HardDropAnimation> = HashMap::new();
         let mut t0 = SystemTime::now();
         let mut max_level = 0;
@@ -323,50 +385,30 @@ impl TetrisSdl {
             let events = inputs
                 .update(delta, self.event_pump.poll_iter())
                 .into_iter()
-                .flat_map(|input| match high_score_entry.as_mut() {
-                    None => match input {
-                        GameInputKey::MoveLeft { player } => fixture.mut_game(player, |g| g.left()),
-                        GameInputKey::MoveRight { player } => {
-                            fixture.mut_game(player, |g| g.right())
-                        }
-                        GameInputKey::SoftDrop { player } => {
-                            fixture.mut_game(player, |g| g.set_soft_drop(true))
-                        }
-                        GameInputKey::HardDrop { player } => {
-                            fixture.mut_game(player, |g| g.hard_drop())
-                        }
-                        GameInputKey::RotateClockwise { player } => {
-                            fixture.mut_game(player, |g| g.rotate(true))
-                        }
-                        GameInputKey::RotateAnticlockwise { player } => {
-                            fixture.mut_game(player, |g| g.rotate(false))
-                        }
-                        GameInputKey::Hold { player } => fixture.mut_game(player, |g| g.hold()),
-                        GameInputKey::Pause => match fixture.state() {
-                            MatchState::Normal | MatchState::Paused => fixture.toggle_paused(),
-                            _ => Some(GameEvent::Quit),
-                        },
-                        GameInputKey::Quit => Some(GameEvent::Quit),
-                        GameInputKey::NextTheme => Some(GameEvent::NextTheme),
+                .flat_map(|input| match input {
+                    GameInputKey::MoveLeft { player } => fixture.mut_game(player, |g| g.left()),
+                    GameInputKey::MoveRight { player } => {
+                        fixture.mut_game(player, |g| g.right())
+                    }
+                    GameInputKey::SoftDrop { player } => {
+                        fixture.mut_game(player, |g| g.set_soft_drop(true))
+                    }
+                    GameInputKey::HardDrop { player } => {
+                        fixture.mut_game(player, |g| g.hard_drop())
+                    }
+                    GameInputKey::RotateClockwise { player } => {
+                        fixture.mut_game(player, |g| g.rotate(true))
+                    }
+                    GameInputKey::RotateAnticlockwise { player } => {
+                        fixture.mut_game(player, |g| g.rotate(false))
+                    }
+                    GameInputKey::Hold { player } => fixture.mut_game(player, |g| g.hold()),
+                    GameInputKey::Pause => match fixture.state() {
+                        MatchState::Normal | MatchState::Paused => fixture.toggle_paused(),
+                        _ => Some(GameEvent::Quit),
                     },
-                    Some(entry) => match input {
-                        GameInputKey::MoveLeft { player } if player == entry.player() => {
-                            entry.left()
-                        }
-                        GameInputKey::MoveRight { player } if player == entry.player() => {
-                            entry.right()
-                        }
-                        GameInputKey::RotateClockwise { player } if player == entry.player() => {
-                            entry.down()
-                        }
-                        GameInputKey::RotateAnticlockwise { player }
-                            if player == entry.player() =>
-                        {
-                            entry.up()
-                        }
-                        GameInputKey::Quit => Some(GameEvent::Quit),
-                        _ => None,
-                    },
+                    GameInputKey::Quit => Some(GameEvent::Quit),
+                    GameInputKey::NextTheme => Some(GameEvent::NextTheme),
                 })
                 .collect::<Vec<GameEvent>>();
 
@@ -408,13 +450,6 @@ impl TetrisSdl {
                         )?;
                         player_hard_drop_animations.insert(*player_id, hard_drop_animation);
                     }
-                    GameEvent::HighScoreEntry if high_score_entry.is_some() => {
-                        match high_score_entry.unwrap().to_high_score() {
-                            None => {}
-                            Some(high_score) => fixture.save_high_score(high_score)?,
-                        }
-                        break 'game;
-                    }
                     _ => {}
                 }
 
@@ -434,18 +469,11 @@ impl TetrisSdl {
                             _ => {}
                         }
                     }
-                    match maybe_high_score {
-                        Some(high_score) if game_over_done => {
-                            // start high score entry
-                            fixture.set_high_score_entry();
-                            high_score_entry = Some(HighScoreEntry::new(
-                                high_score,
-                                &self.texture_creator,
-                                themes.theme(),
-                                themes.scale(),
-                            )?);
+                    if let Some(high_score) = maybe_high_score {
+                        // start high score entry
+                        if game_over_done {
+                            return Ok(Some(high_score))
                         }
-                        _ => {}
                     }
                 }
                 MatchState::Normal if !themes.is_fading() => {
@@ -594,18 +622,10 @@ impl TetrisSdl {
                 themes.draw_paused(&mut self.canvas)?;
             }
 
-            match high_score_entry.as_mut() {
-                None => {}
-                Some(entry) => {
-                    themes.draw_hide_game(&mut self.canvas)?;
-                    entry.draw(&mut self.canvas, themes.theme())?;
-                }
-            }
-
             self.canvas.present();
         }
 
-        Ok(())
+        Ok(None)
     }
 
     fn particle_demo(&mut self) -> Result<(), String> {
@@ -661,7 +681,10 @@ fn main() -> Result<(), String> {
         match tetris.main_menu(last_game_config)? {
             Some(MainMenuAction::NewMatch { config }) => {
                 last_game_config = Some(config);
-                tetris.game(config)?;
+                let maybe_high_score = tetris.game(config)?;
+                if let Some(high_score) = maybe_high_score {
+                    tetris.new_high_score(high_score)?;
+                }
             },
             Some(MainMenuAction::ViewHighScores) => tetris.view_high_score()?,
             _ => {

@@ -107,8 +107,7 @@ impl Player {
 pub enum MatchState {
     Normal,
     Paused,
-    GameOver { high_score: Option<NewHighScore> },
-    HighScoreEntry,
+    GameOver { high_score: Option<NewHighScore> }
 }
 
 impl MatchState {
@@ -229,10 +228,6 @@ impl Match {
             .animate_game_over(animation_type);
     }
 
-    pub fn set_high_score_entry(&mut self) {
-        self.state = MatchState::HighScoreEntry;
-    }
-
     pub fn mut_game<F>(&mut self, player: u32, mut f: F) -> Option<GameEvent>
     where
         F: FnMut(&mut Game) -> Option<GameEvent>,
@@ -281,11 +276,6 @@ impl Match {
             .unwrap()
             .game
             .send_garbage(garbage_lines);
-    }
-
-    pub fn save_high_score(&mut self, high_score: HighScore) -> Result<(), String> {
-        self.high_scores.add_high_score(high_score);
-        self.high_scores.save()
     }
 
     fn highest_score(&self) -> GameMetrics {

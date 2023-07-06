@@ -12,6 +12,7 @@ use sdl2::ttf::{Font, Sdl2TtfContext};
 use sdl2::video::WindowContext;
 use std::cmp::max;
 use std::collections::HashMap;
+use crate::font::FontType;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MenuAction<'a> {
@@ -36,7 +37,6 @@ pub struct Menu<'a> {
     name_width: u32,
     row_height: u32,
     menu_sound: Chunk,
-    menu_music: Music<'a>,
 }
 
 fn maybe_add_texture<'a>(
@@ -79,7 +79,7 @@ impl<'a> Menu<'a> {
         let mut string_textures: HashMap<&'a str, Texture<'a>> = HashMap::new();
         let (window_width, window_height) = window_size;
         let font_size = window_width / 32;
-        let font = ttf.load_font("resource/menu/Roboto-Bold.ttf", font_size as u16)?;
+        let font = FontType::Bold.load(ttf, font_size)?;
 
         let vertical_gutter = font_size / 3;
         let horizontal_gutter = font_size;
@@ -120,8 +120,7 @@ impl<'a> Menu<'a> {
             .map_err(|e| e.to_string())?;
 
         let watermark_font_size = font_size / 2;
-        let watermark_font =
-            ttf.load_font("resource/menu/Roboto-Bold.ttf", watermark_font_size as u16)?;
+        let watermark_font = FontType::Bold.load(ttf, watermark_font_size)?;
         let watermark_surface = watermark_font
             .render(BUILD_INFO)
             .blended(Color::WHITE)
@@ -150,14 +149,9 @@ impl<'a> Menu<'a> {
             caret_size,
             name_width: max_name_width,
             row_height,
-            menu_sound: load_sound("menu", "chime", config)?,
-            menu_music: Music::from_file("resource/menu/music.ogg")?,
+            menu_sound: load_sound("menu", "chime", config)?
         };
         Ok(result)
-    }
-
-    pub fn play_music(&self) -> Result<(), String> {
-        self.menu_music.play(-1)
     }
 
     pub fn play_sound(&self) -> Result<(), String> {

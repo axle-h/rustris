@@ -28,10 +28,14 @@ pub enum GameEvent {
     Quit,
     NextTheme,
     ReceivedGarbage,
-    HighScorePreviousChar,
-    HighScoreNextChar,
-    HighScoreMoveChar,
-    HighScoreEntry,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HighScoreEntryEvent {
+    CursorRight,
+    CursorLeft,
+    ChangeChar,
+    Finished,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

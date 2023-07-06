@@ -146,10 +146,7 @@ impl Board {
         true
     }
 
-    fn mutate_tetromino<F>(&mut self, mut f: F)
-    where
-        F: FnMut(&mut Tetromino),
-    {
+    fn mutate_tetromino<F : FnMut(&mut Tetromino)>(&mut self, mut f: F) {
         // remove from board
         for p in self.tetromino.unwrap().minos() {
             self.set_block(p, BlockState::Empty);

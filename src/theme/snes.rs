@@ -41,14 +41,6 @@ pub fn snes_theme<'a>(
         0x40,
         BLOCK_PIXELS,
         (ALPHA_WIDTH, ALPHA_HEIGHT),
-        2,
-        false,
-        char_snip(0, 11),
-        (0..26)
-            .map(|i| char_snip(1, i))
-            .collect::<Vec<Rect>>()
-            .try_into()
-            .unwrap(),
         (0..10)
             .map(|i| char_snip(0, i))
             .collect::<Vec<Rect>>()

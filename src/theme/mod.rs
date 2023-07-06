@@ -41,14 +41,6 @@ pub trait Theme {
     fn music(&self) -> &Music;
     fn receive_event(&mut self, event: GameEvent) -> Result<(), String>;
     fn mino_rects(&self, minos: Minos) -> [Rect; 4];
-    fn string_size(&self, string_length: u32) -> (u32, u32);
-    fn draw_string(
-        &self,
-        canvas: &mut WindowCanvas,
-        point: Point,
-        value: &str,
-    ) -> Result<(), String>;
-    fn text_is_dark(&self) -> bool;
 }
 
 // const REFERENCE_I: Color = Color::CYAN;

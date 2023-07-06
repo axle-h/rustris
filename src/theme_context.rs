@@ -117,7 +117,6 @@ pub struct ThemeContext<'a> {
     current: usize,
     themes: [ScaledTheme<'a>; THEMES],
     lighten_screen: Texture<'a>,
-    darken_screen: Texture<'a>,
     fade_buffer: Texture<'a>,
     fade_duration: Option<Duration>,
 }
@@ -150,17 +149,6 @@ impl<'a> ThemeContext<'a> {
             })
             .map_err(|e| e.to_string())?;
 
-        let mut darken_screen = texture_creator
-            .create_texture_target(None, window_width, window_height)
-            .map_err(|e| e.to_string())?;
-        darken_screen.set_blend_mode(BlendMode::Blend);
-        canvas
-            .with_texture_canvas(&mut darken_screen, |c| {
-                c.set_draw_color(Color::RGBA(0, 0, 0, 200));
-                c.clear();
-            })
-            .map_err(|e| e.to_string())?;
-
         let mut fade_buffer = texture_creator
             .create_texture_target(None, window_width, window_height)
             .map_err(|e| e.to_string())?;
@@ -171,7 +159,6 @@ impl<'a> ThemeContext<'a> {
             themes: [game_boy, nes, snes]
                 .map(|theme| ScaledTheme::new(Box::new(theme), players, window_size)),
             lighten_screen,
-            darken_screen,
             fade_buffer,
             fade_duration: None,
         })
@@ -286,15 +273,6 @@ impl<'a> ThemeContext<'a> {
         }
 
         Ok(())
-    }
-
-    pub fn draw_hide_game(&self, canvas: &mut WindowCanvas) -> Result<(), String> {
-        let texture = if self.theme().text_is_dark() {
-            &self.lighten_screen
-        } else {
-            &self.darken_screen
-        };
-        canvas.copy(texture, None, None)
     }
 
     pub fn draw_paused(&self, canvas: &mut WindowCanvas) -> Result<(), String> {

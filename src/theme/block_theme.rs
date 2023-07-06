@@ -124,10 +124,6 @@ pub struct BlockThemeOptions {
     ghost_alpha_mod: u8,
     block_size: u32,
     char_size: (u32, u32),
-    string_gutter: u32,
-    text_is_dark: bool,
-    space_snip: Rect,
-    alpha_snips: [Rect; 26],
     num_snips: [Rect; 10],
     peek_snips: [Rect; 5],
     hold_snip: Rect,
@@ -172,10 +168,6 @@ impl BlockThemeOptions {
         ghost_alpha_mod: u8,
         block_size: u32,
         char_size: (u32, u32),
-        string_gutter: u32,
-        text_is_dark: bool,
-        space_snip: Rect,
-        alpha_snips: [Rect; 26],
         num_snips: [Rect; 10],
         peek_snips: [Rect; 5],
         hold_snip: Rect,
@@ -209,10 +201,6 @@ impl BlockThemeOptions {
             ghost_alpha_mod,
             block_size,
             char_size,
-            string_gutter,
-            text_is_dark,
-            space_snip,
-            alpha_snips,
             num_snips,
             peek_snips,
             hold_snip,
@@ -283,33 +271,9 @@ impl BlockThemeOptions {
         load_sound(&self.name, name, self.config)
     }
 
-    fn string_width(&self, length: u32) -> u32 {
-        let (char_width, _) = self.char_size;
-        char_width * length + self.string_gutter * (length - 1)
-    }
-
-    fn alpha_snip(&self, alpha: char) -> Rect {
-        if alpha == ' ' {
-            self.space_snip
-        } else if alpha.is_ascii_digit() {
-            self.num_snips[(alpha as usize) - '0' as usize]
-        } else if alpha.is_alphabetic() {
-            self.alpha_snips[(alpha.to_ascii_uppercase() as usize) - 'A' as usize]
-        } else {
-            panic!("unknown char {}", alpha)
-        }
-    }
-
-    fn string_rects(&self, s: &str, offset_x: i32, offset_y: i32) -> Vec<(Rect, Rect)> {
-        let mut result = vec![];
-        let mut x = offset_x;
-        for c in s.chars() {
-            let from_snip = self.alpha_snip(c);
-            let to_snip = Rect::new(x, offset_y, from_snip.width(), from_snip.height());
-            x += (from_snip.width() + self.string_gutter) as i32;
-            result.push((from_snip, to_snip));
-        }
-        result
+    fn digit_snip(&self, digit: char) -> Rect {
+        assert!(digit.is_ascii_digit());
+        self.num_snips[(digit as usize) - '0' as usize]
     }
 
     fn j_to_y(&self, j: u32) -> u32 {
@@ -565,7 +529,7 @@ impl<'a> Theme for BlockTheme<'a> {
         for (index, char) in score.chars().rev().enumerate() {
             canvas.copy(
                 &self.sprites,
-                self.options.alpha_snip(char),
+                self.options.digit_snip(char),
                 self.options.score.digit(index),
             )?;
         }
@@ -574,7 +538,7 @@ impl<'a> Theme for BlockTheme<'a> {
         for (index, char) in level.chars().rev().enumerate() {
             canvas.copy(
                 &self.sprites,
-                self.options.alpha_snip(char),
+                self.options.digit_snip(char),
                 self.options.levels.digit(index),
             )?;
         }
@@ -583,7 +547,7 @@ impl<'a> Theme for BlockTheme<'a> {
         for (index, char) in lines.chars().rev().enumerate() {
             canvas.copy(
                 &self.sprites,
-                self.options.alpha_snip(char),
+                self.options.digit_snip(char),
                 self.options.lines.digit(index),
             )?;
         }
@@ -809,27 +773,5 @@ impl<'a> Theme for BlockTheme<'a> {
 
     fn mino_rects(&self, minos: Minos) -> [Rect; 4] {
         minos.map(|mino| self.options.mino_dest_rect(mino.x as u32, mino.y as u32))
-    }
-
-    fn string_size(&self, string_length: u32) -> (u32, u32) {
-        let width = self.options.string_width(string_length);
-        let (_, char_height) = self.options.char_size;
-        (width, char_height)
-    }
-
-    fn draw_string(
-        &self,
-        canvas: &mut WindowCanvas,
-        point: Point,
-        value: &str,
-    ) -> Result<(), String> {
-        for (src, dst) in self.options.string_rects(value, point.x(), point.y()) {
-            canvas.copy(&self.sprites, src, dst)?;
-        }
-        Ok(())
-    }
-
-    fn text_is_dark(&self) -> bool {
-        self.options.text_is_dark
     }
 }

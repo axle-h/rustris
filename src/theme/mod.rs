@@ -18,7 +18,6 @@ pub mod sound;
 pub mod perimeter;
 
 pub trait Theme {
-    fn max_score(&self) -> u32;
     fn block_size(&self) -> u32;
     fn background_color(&self) -> Color;
     fn background_size(&self) -> (u32, u32);

@@ -101,7 +101,7 @@ impl MetricSnips {
     }
 
     fn format(&self, value: u32) -> String {
-        let s = format!("{}", value);
+        let s = format!("{}", value.min(self.max_value));
         if self.zero_fill {
             let fill_len = self.digits.len() - s.len();
             let mut result: String = (0..fill_len).map(|_| '0').collect();
@@ -478,10 +478,6 @@ impl<'a> BlockTheme<'a> {
 }
 
 impl<'a> Theme for BlockTheme<'a> {
-    fn max_score(&self) -> u32 {
-        self.options.score.max_value
-    }
-
     fn block_size(&self) -> u32 {
         self.options.block_size
     }

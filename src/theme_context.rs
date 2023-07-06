@@ -206,6 +206,16 @@ impl<'a> ThemeContext<'a> {
         &self.themes[self.current].scale
     }
 
+    pub fn player_line_snip(&self, player: u32, j: u32) -> Rect {
+        let theme = &self.themes[self.current];
+        let player = theme.player_themes.get(player as usize - 1).unwrap();
+        theme.scale.scale_and_offset_rect(
+            theme.theme.line_snip(j),
+            player.board_snip.x(),
+            player.board_snip.y()
+        )
+    }
+
     pub fn current(&self) -> &ScaledTheme {
         &self.themes[self.current]
     }

@@ -38,7 +38,7 @@ pub fn snes_theme<'a>(
         "board.png".to_string(),
         "game-over.png".to_string(),
         "paused.png".to_string(),
-        0x60,
+        0x40,
         BLOCK_PIXELS,
         (ALPHA_WIDTH, ALPHA_HEIGHT),
         2,

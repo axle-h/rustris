@@ -4,12 +4,20 @@ pub mod hard_drop;
 pub mod impact;
 
 use std::time::Duration;
+use crate::particles::prescribed::PrescribedParticles;
 
 #[derive(Clone, Copy, Debug)]
 pub enum TextureAnimate {
     Nothing,
     SetAlpha,
     FillAlphaRectangle { width: f64 },
+    EmitParticles(PrescribedParticles)
+}
+
+impl TextureAnimate {
+    pub fn is_emit_particles(&self) -> bool {
+        matches!(self, TextureAnimate::EmitParticles(_))
+    }
 }
 
 pub trait TextureAnimation {

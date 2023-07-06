@@ -25,6 +25,7 @@ impl Scale {
         }
     }
 
+    /// splits the entire window up into horizontally stacked chunks equally between players
     pub fn player_window(&self, player: u32) -> Rect {
         let player_chunk_width = self.window_width / self.players;
         let x = player_chunk_width * (player - 1);

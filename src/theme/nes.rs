@@ -37,7 +37,7 @@ pub fn nes_theme<'a>(
         "board.png".to_string(),
         "game-over.png".to_string(),
         "paused.png".to_string(),
-        0x60,
+        0x50,
         BLOCK_PIXELS,
         (ALPHA_PIXELS, ALPHA_PIXELS),
         2,

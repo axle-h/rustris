@@ -3,15 +3,18 @@ use crate::animation::TextureAnimate;
 use crate::game::board::DestroyLines;
 
 use std::time::Duration;
+use crate::particles::prescribed::PrescribedParticles;
 
 const MAX_FLASHES: u32 = 3;
 const FLASH_DURATION: Duration = Duration::from_millis(250);
 const SWEEP_DURATION: Duration = Duration::from_millis(750);
+const PARTICLE_FADE_IN_DURATION: Duration = Duration::from_millis(750);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DestroyAnimationType {
     Flash,
     Sweep,
+    Particles
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -26,7 +29,7 @@ impl State {
         match self {
             State::Finished => State::Finished,
             State::Nothing(duration) => State::Nothing(duration + delta),
-            State::Animate(duration, animate) => State::Animate(duration + delta, animate),
+            State::Animate(duration, animate) => State::Animate(duration + delta, animate)
         }
     }
 }
@@ -38,6 +41,7 @@ fn first_state(destroy_type: DestroyAnimationType) -> State {
             Duration::ZERO,
             TextureAnimate::FillAlphaRectangle { width: 0.0 },
         ),
+        DestroyAnimationType::Particles => State::Nothing(Duration::ZERO)
     }
 }
 
@@ -86,17 +90,24 @@ impl DestroyAnimation {
         }
     }
 
-    fn next_nothing(&mut self, duration: Duration) -> State {
-        match self.destroy_type {
-            DestroyAnimationType::Flash => self.next_flash(duration),
-            DestroyAnimationType::Sweep => self.next_sweep(duration),
+    fn next_particles(&mut self) -> State {
+        match self.state {
+            State::Nothing(_) if self.count == 0 => {
+                self.count += 1;
+                let particles = PrescribedParticles::FadeInLatticeBurstAndFall { fade_in: PARTICLE_FADE_IN_DURATION };
+                State::Animate(Duration::ZERO, TextureAnimate::EmitParticles(particles))
+            },
+            State::Animate(_, _) => State::Nothing(Duration::ZERO),
+            State::Nothing(duration) if duration < PARTICLE_FADE_IN_DURATION => State::Nothing(duration),
+            _ => State::Finished
         }
     }
 
-    fn next_animate(&mut self, duration: Duration, _animate: TextureAnimate) -> State {
+    fn next(&mut self, duration: Duration) -> State {
         match self.destroy_type {
             DestroyAnimationType::Flash => self.next_flash(duration),
             DestroyAnimationType::Sweep => self.next_sweep(duration),
+            DestroyAnimationType::Particles => self.next_particles(),
         }
     }
 }
@@ -107,8 +118,8 @@ impl TextureAnimation for DestroyAnimation {
 
         let state = match self.state {
             State::Finished => State::Finished,
-            State::Nothing(duration) => self.next_nothing(duration),
-            State::Animate(duration, animate) => self.next_animate(duration, animate),
+            State::Nothing(duration) => self.next(duration),
+            State::Animate(duration, _) => self.next(duration)
         };
         self.state = state;
         self.current()

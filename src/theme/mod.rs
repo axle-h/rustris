@@ -15,6 +15,7 @@ pub mod game_boy;
 pub mod nes;
 pub mod snes;
 pub mod sound;
+pub mod perimeter;
 
 pub trait Theme {
     fn max_score(&self) -> u32;
@@ -31,7 +32,10 @@ pub trait Theme {
         animate_game_over: Option<GameOverAnimate>,
     ) -> Result<(), String>;
     fn pause_texture(&self) -> &Texture;
+
+    /// get the rect of the line within the board_snip
     fn line_snip(&self, j: u32) -> Rect;
+
     fn destroy_animation_type(&self) -> DestroyAnimationType;
     fn game_over_animation_type(&self) -> GameOverAnimationType;
     fn music(&self) -> &Music;

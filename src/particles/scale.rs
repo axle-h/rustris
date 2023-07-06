@@ -1,0 +1,96 @@
+use std::cmp::{max, min};
+use sdl2::rect::{Point, Rect};
+use crate::particles::geometry::{PointF, RectF};
+use crate::particles::source::{ParticleSource, ParticlePositionSource};
+
+const LATTICE_SCALE: usize = 5;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Scale {
+    window_width: f64,
+    window_height: f64,
+}
+
+impl Scale {
+    pub fn new(window_size: (u32, u32)) -> Self {
+        let (window_width, window_height) = window_size;
+        Self { window_width: window_width as f64, window_height: window_height as f64 }
+    }
+
+    pub fn point_to_particle_space<P : Into<Point>>(&self, point: P) -> PointF {
+        let point = point.into();
+        PointF::new(
+            point.x() as f64 / self.window_width,
+            point.y() as f64 / self.window_height
+        )
+    }
+
+    pub fn point_to_render_space<P : Into<PointF>>(&self, point: P) -> Point {
+        let point = point.into();
+        Point::new(
+            (point.x() * self.window_width).round() as i32,
+            (point.y() * self.window_height).round() as i32
+        )
+    }
+
+    pub fn rect_to_particle_space<R : Into<Rect>>(&self, rect: R) -> RectF {
+        let rect = rect.into();
+        RectF::new(
+            rect.x() as f64 / self.window_width,
+            rect.y() as f64 / self.window_height,
+            rect.width() as f64 / self.window_width,
+            rect.height() as f64 / self.window_height,
+        )
+    }
+
+    pub fn static_particle_source_type<P : Into<Point>>(&self, point: P) -> ParticlePositionSource {
+        ParticlePositionSource::Static(self.point_to_particle_space(point.into()))
+    }
+
+    pub fn rect_particle_source_type<R : Into<Rect>>(&self, rect: R) -> ParticlePositionSource {
+        ParticlePositionSource::Rect(self.rect_to_particle_space(rect.into()))
+    }
+
+    pub fn rect_lattice<R : Into<Rect>>(&self, rect: R) -> ParticlePositionSource {
+        let rect = rect.into();
+        let rows = max(rect.height() as usize / LATTICE_SCALE, 3);
+        let cols = max(rect.width() as usize / LATTICE_SCALE, 3);
+
+        assert!(rows > 0);
+        assert!(cols > 0);
+        let cell_width = (rect.width() as f64 / (cols - 1) as f64).round() as i32;
+        let cell_height = (rect.height() as f64 / (rows - 1) as f64).round() as i32;
+
+        let points = (0..rows as i32)
+            .flat_map(|j| (0..cols as i32).map(move |i| Point::new(rect.x() + i * cell_width, rect.y() + j * cell_height)))
+            .map(|p| self.point_to_particle_space(p))
+            .collect::<Vec<PointF>>();
+        ParticlePositionSource::Lattice(points)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn point_render_to_particle_space() {
+        let scale = Scale::new((1920, 1080));
+        let observed = scale.point_to_particle_space((480, 540));
+        assert_eq!(observed, PointF::new(0.25, 0.5))
+    }
+
+    #[test]
+    fn point_particle_to_render_space() {
+        let scale = Scale::new((1920, 1080));
+        let observed = scale.point_to_render_space((0.25, 0.5));
+        assert_eq!(observed, Point::new(480, 540))
+    }
+
+    #[test]
+    fn rect_render_to_particle_space() {
+        let scale = Scale::new((1920, 1080));
+        let observed = scale.rect_to_particle_space(Rect::new(480, 540, 96, 27));
+        assert_eq!(observed, RectF::new(0.25, 0.5, 0.05, 0.025))
+    }
+}

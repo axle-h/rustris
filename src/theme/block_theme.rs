@@ -15,9 +15,10 @@ use sdl2::image::LoadTexture;
 use sdl2::mixer::{Chunk, Music};
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
-use sdl2::render::{Texture, TextureCreator, WindowCanvas};
+use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::video::WindowContext;
 use std::cmp::min;
+use crate::theme::perimeter::PerimeterRender;
 
 pub const VISIBLE_BUFFER: u32 = 2;
 pub const VISIBLE_BOARD_HEIGHT: u32 = BOARD_HEIGHT + VISIBLE_BUFFER;
@@ -378,6 +379,7 @@ pub struct BlockTheme<'a> {
     options: BlockThemeOptions,
     sprites: Texture<'a>,
     sprites_ghost: Texture<'a>,
+    // perimeter: PerimeterRender<'a>,
     paused: Texture<'a>,
     game_over: Texture<'a>,
     board_texture: Texture<'a>,
@@ -405,18 +407,21 @@ impl<'a> BlockTheme<'a> {
         options: BlockThemeOptions,
     ) -> Result<Self, String> {
         let sprites = texture_creator.load_texture(options.sprite_file())?;
-        let sprites_query = sprites.query();
 
         // ghost resource are just lightened resource
+        let sprites_query = sprites.query();
         let mut sprites_ghost = texture_creator
             .create_texture_target(None, sprites_query.width, sprites_query.height)
             .map_err(|e| e.to_string())?;
+        sprites_ghost.set_blend_mode(BlendMode::Blend);
         sprites_ghost.set_alpha_mod(options.ghost_alpha_mod);
         canvas
-            .with_texture_canvas(&mut sprites_ghost, |texture_canvas| {
-                texture_canvas.copy(&sprites, None, None).unwrap();
+            .with_texture_canvas(&mut sprites_ghost, |c| {
+                c.copy(&sprites, None, None).unwrap();
             })
             .map_err(|e| e.to_string())?;
+
+        // let perimeter = PerimeterRender::new(canvas, texture_creator, options.block_size)?;
 
         let board_texture = texture_creator.load_texture(options.board_file())?;
         let board_query = board_texture.query();
@@ -650,6 +655,7 @@ impl<'a> Theme for BlockTheme<'a> {
                             )?;
                         }
                         BlockState::Ghost(shape, rotation, mino_id) => {
+                            // self.perimeter.draw_mino(canvas, *shape, *rotation, *mino_id, self.options.mino_dest_rect(i as u32, j))?;
                             self.draw_mino(
                                 canvas,
                                 &self.sprites_ghost,
@@ -747,13 +753,7 @@ impl<'a> Theme for BlockTheme<'a> {
     }
 
     fn line_snip(&self, j: u32) -> Rect {
-        // flipped vertically
-        Rect::new(
-            0,
-            self.options.j_to_y(j) as i32,
-            self.options.board_width,
-            self.options.block_size,
-        )
+        self.options.row_rect(j)
     }
 
     fn destroy_animation_type(&self) -> DestroyAnimationType {

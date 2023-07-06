@@ -13,6 +13,7 @@ mod player;
 mod scale;
 mod theme;
 mod theme_context;
+mod particles;
 
 extern crate sdl2;
 
@@ -40,8 +41,13 @@ use sdl2::video::WindowContext;
 use sdl2::{AudioSubsystem, EventPump, Sdl};
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
+use sdl2::rect::Rect;
 use theme_context::{PlayerTextures, TextureMode, ThemeContext};
+use crate::particles::geometry::PointF;
+use crate::particles::Particles;
+use crate::particles::render::ParticleRender;
+use crate::particles::source::{ParticleModulation, ParticlePositionSource, ParticleSource};
 
 const MAX_PLAYERS: u32 = 2;
 
@@ -59,7 +65,7 @@ struct TetrisSdl {
     canvas: WindowCanvas,
     event_pump: EventPump,
     _audio: AudioSubsystem,
-    texture_creator: TextureCreator<WindowContext>,
+    texture_creator: TextureCreator<WindowContext>
 }
 
 impl TetrisSdl {
@@ -295,6 +301,9 @@ impl TetrisSdl {
             ));
             texture_refs.push((&mut textures.board, TextureMode::PlayerBoard(player)));
         }
+
+        let particle_scale = particles::scale::Scale::new(self.canvas.window().size());
+        let mut particles = ParticleRender::new(Particles::new(10000), &self.texture_creator, particle_scale)?;
 
         themes.theme_mut().music().play(-1)?;
 
@@ -555,6 +564,21 @@ impl TetrisSdl {
                 .collect();
             themes.draw_current(&mut self.canvas, &mut texture_refs, delta, offsets)?;
 
+
+            // particles
+            for player in fixture.players.iter() {
+                for (j, emit) in player.current_particles() {
+                    let line_snip = themes.player_line_snip(player.player, j);
+                    let source = emit.build_rect_source(&particle_scale, line_snip);
+                    particles.add_source(source);
+                };
+            }
+
+            if !fixture.state().is_paused() {
+                particles.update(delta);
+            }
+            particles.draw(&mut self.canvas)?;
+
             let mut remove_hard_drop_animations: Vec<u32> = vec![];
             for (player_id, animation) in player_hard_drop_animations.iter_mut() {
                 if !animation.update(&mut self.canvas, delta)? {
@@ -583,6 +607,51 @@ impl TetrisSdl {
 
         Ok(())
     }
+
+    fn particle_demo(&mut self) -> Result<(), String> {
+        let particle_scale = particles::scale::Scale::new(self.canvas.window().size());
+        let mut particles = ParticleRender::new(Particles::new(1000), &self.texture_creator, particle_scale)?;
+
+        let (window_width, window_height) = self.canvas.window().size();
+        let rect = Rect::from_center((window_width as i32 / 2, window_height as i32 / 2), 200, 50);
+
+        particles.add_source(
+            ParticleSource::new(
+                particle_scale.rect_lattice(rect),
+                ParticleModulation::Constant { count: 200, step: Duration::from_secs(3) }
+            ).with_velocity((PointF::new(0.0, -0.4), PointF::new(0.1, 0.1)))
+                .with_gravity(1.5)
+                .with_anchor(Duration::from_millis(500))
+                .with_fade_in(Duration::from_millis(500))
+        );
+
+        let mut inputs = GameInputContext::new(self.config.input);
+        let mut t0 = SystemTime::now();
+        'game: loop {
+            let now = SystemTime::now();
+            let delta = now.duration_since(t0).map_err(|e| e.to_string())?;
+            t0 = now;
+
+            for key in inputs.update(delta, self.event_pump.poll_iter()).into_iter() {
+                match key {
+                    GameInputKey::Quit => {
+                        break 'game
+                    }
+                    _ => {}
+                }
+            }
+
+            self.canvas.set_draw_color(Color::BLACK);
+            self.canvas.clear();
+
+            particles.update(delta);
+            particles.draw(&mut self.canvas)?;
+
+            self.canvas.present();
+        }
+
+        Ok(())
+    }
 }
 
 fn main() -> Result<(), String> {
@@ -601,4 +670,7 @@ fn main() -> Result<(), String> {
         }
     }
     Ok(())
+
+    // let mut tetris = TetrisSdl::new()?;
+    // tetris.particle_demo()
 }

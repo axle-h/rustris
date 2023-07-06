@@ -1,4 +1,6 @@
+use std::slice::Iter;
 use super::geometry::{Point, Rotation};
+use bitflags::{bitflags, Flags};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TetrominoShape {
@@ -25,7 +27,12 @@ pub enum TetrominoShape {
 }
 
 impl TetrominoShape {
-    fn meta(&self) -> &TetrominoMeta {
+    pub const ALL: [TetrominoShape; 7] = [
+        TetrominoShape::I, TetrominoShape::O, TetrominoShape::T, TetrominoShape::S,
+        TetrominoShape::Z, TetrominoShape::J, TetrominoShape::L
+    ];
+
+    pub fn meta(&self) -> &TetrominoMeta {
         match self {
             TetrominoShape::I => &I,
             TetrominoShape::O => &O,
@@ -130,14 +137,47 @@ const TETROMINO_OFFSETS_O_EAST: TetrominoOffsets = [Offset(0, -1); 5];
 const TETROMINO_OFFSETS_O_SOUTH: TetrominoOffsets = [Offset(-1, -1); 5];
 const TETROMINO_OFFSETS_O_WEST: TetrominoOffsets = [Offset(-1, 0); 5];
 
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct Perimeter: u8 {
+        const Top = 0b00000001;
+        const Right = 0b00000010;
+        const Bottom = 0b00000100;
+        const Left = 0b00001000;
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct Corner: u8 {
+        const None = 0;
+        const TopLeft = 0b00000001;
+        const TopRight = 0b00000010;
+        const BottomRight = 0b00000100;
+        const BottomLeft = 0b00001000;
+    }
+}
+
 pub type Minos = [Point; 4];
+pub type MinoPerimeter = [Perimeter; 4];
+pub type MinoCorners = [Corner; 4];
+
+const fn perimeter(minos: [u8; 4]) -> MinoPerimeter {
+    // error[E0658]: `for` is not allowed in a `const fn`
+    let mut result = [Perimeter::Top; 4];
+    result[0] = Perimeter::from_bits_truncate(minos[0]);
+    result[1] = Perimeter::from_bits_truncate(minos[1]);
+    result[2] = Perimeter::from_bits_truncate(minos[2]);
+    result[3] = Perimeter::from_bits_truncate(minos[3]);
+    return result;
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct TetrominoMeta {
+pub struct TetrominoMeta {
     shape: TetrominoShape,
     spawn_point: Point,
     minos: Minos,
-    bounding_box: i32,
+    perimeter: MinoPerimeter,
+    outside_corners: MinoCorners,
+    bounding_box: u32,
 }
 
 impl TetrominoMeta {
@@ -163,7 +203,7 @@ impl TetrominoMeta {
             return self.minos;
         }
 
-        let center = (self.bounding_box - 1) / 2;
+        let center = (self.bounding_box as i32 - 1) / 2;
         let to_origin = -center;
 
         let (rotations, clockwise) = match rotation {
@@ -173,8 +213,7 @@ impl TetrominoMeta {
             Rotation::West => (1, false),
         };
 
-        return self
-            .minos
+        self.minos
             .iter()
             .map(|p| {
                 let mut result = p.translate(to_origin, to_origin);
@@ -185,7 +224,23 @@ impl TetrominoMeta {
             })
             .collect::<Vec<Point>>()
             .try_into()
-            .unwrap();
+            .unwrap()
+    }
+
+    pub fn bounding_box(&self) -> u32 {
+        self.bounding_box
+    }
+
+    pub fn minos(&self) -> Minos {
+        self.minos
+    }
+
+    pub fn perimeter(&self) -> MinoPerimeter {
+        self.perimeter
+    }
+
+    pub fn outside_corners(&self) -> MinoCorners {
+        self.outside_corners
     }
 }
 
@@ -198,6 +253,13 @@ const I: TetrominoMeta = TetrominoMeta {
         Point::new(3, 2),
         Point::new(4, 2),
     ],
+    perimeter: perimeter([
+        Perimeter::Top.bits() | Perimeter::Bottom.bits() | Perimeter::Left.bits(),
+        Perimeter::Top.bits() | Perimeter::Bottom.bits(),
+        Perimeter::Top.bits() | Perimeter::Bottom.bits(),
+        Perimeter::Top.bits() | Perimeter::Right.bits() | Perimeter::Bottom.bits(),
+    ]),
+    outside_corners: [Corner::None, Corner::None, Corner::None, Corner::None],
     bounding_box: 5,
 };
 
@@ -210,6 +272,13 @@ const J: TetrominoMeta = TetrominoMeta {
         Point::new(2, 1),
         Point::new(0, 2),
     ],
+    perimeter: perimeter([
+        Perimeter::Bottom.bits() | Perimeter::Left.bits(),
+        Perimeter::Top.bits() | Perimeter::Bottom.bits(),
+        Perimeter::Top.bits() | Perimeter::Right.bits() | Perimeter::Bottom.bits(),
+        Perimeter::Top.bits() | Perimeter::Right.bits() | Perimeter::Left.bits(),
+    ]),
+    outside_corners: [Corner::TopRight, Corner::None, Corner::None, Corner::None],
     bounding_box: 3,
 };
 
@@ -222,6 +291,13 @@ const L: TetrominoMeta = TetrominoMeta {
         Point::new(2, 1),
         Point::new(2, 2),
     ],
+    perimeter: perimeter([
+        Perimeter::Top.bits() | Perimeter::Bottom.bits() | Perimeter::Left.bits(),
+        Perimeter::Top.bits() | Perimeter::Bottom.bits(),
+        Perimeter::Right.bits() | Perimeter::Bottom.bits(),
+        Perimeter::Top.bits() | Perimeter::Right.bits() | Perimeter::Left.bits(),
+    ]),
+    outside_corners: [Corner::None, Corner::None, Corner::TopLeft, Corner::None],
     bounding_box: 3,
 };
 
@@ -234,6 +310,13 @@ const O: TetrominoMeta = TetrominoMeta {
         Point::new(1, 2),
         Point::new(2, 2),
     ],
+    perimeter: perimeter([
+        Perimeter::Bottom.bits() | Perimeter::Left.bits(),
+        Perimeter::Right.bits() | Perimeter::Bottom.bits(),
+        Perimeter::Top.bits() | Perimeter::Left.bits(),
+        Perimeter::Top.bits() | Perimeter::Right.bits(),
+    ]),
+    outside_corners: [Corner::None, Corner::None, Corner::None, Corner::None],
     bounding_box: 3,
 };
 
@@ -246,6 +329,13 @@ const S: TetrominoMeta = TetrominoMeta {
         Point::new(1, 2),
         Point::new(2, 2),
     ],
+    perimeter: perimeter([
+        Perimeter::Top.bits() | Perimeter::Bottom.bits() | Perimeter::Left.bits(),
+        Perimeter::Right.bits() | Perimeter::Bottom.bits(),
+        Perimeter::Top.bits() | Perimeter::Left.bits(),
+        Perimeter::Top.bits() | Perimeter::Right.bits() | Perimeter::Bottom.bits(),
+    ]),
+    outside_corners: [Corner::None, Corner::TopLeft, Corner::BottomRight, Corner::None],
     bounding_box: 3,
 };
 
@@ -258,6 +348,13 @@ const T: TetrominoMeta = TetrominoMeta {
         Point::new(2, 1),
         Point::new(1, 2),
     ],
+    perimeter: perimeter([
+        Perimeter::Top.bits() | Perimeter::Bottom.bits() | Perimeter::Left.bits(),
+        Perimeter::Bottom.bits(),
+        Perimeter::Top.bits() | Perimeter::Right.bits() | Perimeter::Bottom.bits(),
+        Perimeter::Top.bits() | Perimeter::Right.bits() | Perimeter::Left.bits(),
+    ]),
+    outside_corners: [Corner::None, Corner::from_bits_truncate(Corner::TopLeft.bits() | Corner::TopRight.bits()), Corner::None, Corner::None],
     bounding_box: 3,
 };
 
@@ -270,6 +367,13 @@ const Z: TetrominoMeta = TetrominoMeta {
         Point::new(0, 2),
         Point::new(1, 2),
     ],
+    perimeter: perimeter([
+        Perimeter::Bottom.bits() | Perimeter::Left.bits(),
+        Perimeter::Top.bits() | Perimeter::Right.bits() | Perimeter::Bottom.bits(),
+        Perimeter::Top.bits() | Perimeter::Bottom.bits() | Perimeter::Left.bits(),
+        Perimeter::Top.bits() | Perimeter::Right.bits(),
+    ]),
+    outside_corners: [Corner::TopRight, Corner::None, Corner::None, Corner::BottomLeft],
     bounding_box: 3,
 };
 

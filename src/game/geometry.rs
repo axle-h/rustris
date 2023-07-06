@@ -40,6 +40,12 @@ impl Point {
     }
 }
 
+impl From<(i32, i32)> for Point {
+    fn from((x, y): (i32, i32)) -> Self {
+        Point::new(x, y)
+    }
+}
+
 impl Neg for Point {
     type Output = Point;
 

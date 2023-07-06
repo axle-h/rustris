@@ -37,7 +37,7 @@ fn game_boy_theme_options(palette: &GameBoyPalette, config: Config) -> BlockThem
         palette.board_file(),
         palette.game_over_file(),
         palette.paused_file(),
-        0x60,
+        0x30,
         BLOCK_PIXELS,
         (ALPHA_PIXELS, ALPHA_PIXELS),
         2,

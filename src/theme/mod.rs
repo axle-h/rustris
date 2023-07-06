@@ -31,7 +31,6 @@ pub trait Theme {
         animate_lines: Vec<(u32, TextureAnimate)>,
         animate_game_over: Option<GameOverAnimate>,
     ) -> Result<(), String>;
-    fn pause_texture(&self) -> &Texture;
 
     /// get the rect of the line within the board_snip
     fn line_snip(&self, j: u32) -> Rect;

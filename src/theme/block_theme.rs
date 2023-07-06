@@ -120,7 +120,6 @@ pub struct BlockThemeOptions {
     background_file: String,
     board_file: String,
     game_over_file: String,
-    paused_file: String,
     ghost_alpha_mod: u8,
     block_size: u32,
     char_size: (u32, u32),
@@ -164,7 +163,6 @@ impl BlockThemeOptions {
         background_file: String,
         board_file: String,
         game_over_file: String,
-        paused_file: String,
         ghost_alpha_mod: u8,
         block_size: u32,
         char_size: (u32, u32),
@@ -197,7 +195,6 @@ impl BlockThemeOptions {
             background_file,
             board_file,
             game_over_file,
-            paused_file,
             ghost_alpha_mod,
             block_size,
             char_size,
@@ -257,10 +254,6 @@ impl BlockThemeOptions {
 
     fn game_over_file(&self) -> String {
         self.resource(&self.game_over_file)
-    }
-
-    fn paused_file(&self) -> String {
-        self.resource(&self.paused_file)
     }
 
     fn load_music<'a>(&self) -> Result<Music<'a>, String> {
@@ -344,7 +337,6 @@ pub struct BlockTheme<'a> {
     sprites: Texture<'a>,
     sprites_ghost: Texture<'a>,
     // perimeter: PerimeterRender<'a>,
-    paused: Texture<'a>,
     game_over: Texture<'a>,
     board_texture: Texture<'a>,
     board_texture_size: (u32, u32),
@@ -400,7 +392,6 @@ impl<'a> BlockTheme<'a> {
         );
 
         let game_over = texture_creator.load_texture(options.game_over_file())?;
-        let paused = texture_creator.load_texture(options.paused_file())?;
 
         let music = options.load_music()?;
         let move_sound = options.load_sound("move")?;
@@ -419,7 +410,6 @@ impl<'a> BlockTheme<'a> {
             options,
             sprites,
             sprites_ghost,
-            paused,
             game_over,
             board_texture,
             board_texture_size: (board_query.width, board_query.height),
@@ -710,10 +700,6 @@ impl<'a> Theme for BlockTheme<'a> {
         }
 
         Ok(())
-    }
-
-    fn pause_texture(&self) -> &Texture {
-        &self.paused
     }
 
     fn line_snip(&self, j: u32) -> Rect {

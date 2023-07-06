@@ -15,6 +15,7 @@ mod theme;
 mod theme_context;
 mod particles;
 mod font;
+mod paused;
 
 extern crate sdl2;
 
@@ -32,7 +33,7 @@ use crate::player::MatchState;
 use game_input::GameInputContext;
 use player::Match;
 use sdl2::image::{InitFlag as ImageInitFlag, Sdl2ImageContext};
-use sdl2::mixer::{InitFlag as MixerInitFlag, AUDIO_S16LSB, DEFAULT_CHANNELS, Music};
+use sdl2::mixer::{InitFlag as MixerInitFlag, AUDIO_S16LSB, DEFAULT_CHANNELS};
 use sdl2::pixels::Color;
 use sdl2::render::{Texture, TextureCreator, WindowCanvas};
 use sdl2::sys::mixer::MIX_CHANNELS;
@@ -49,6 +50,7 @@ use crate::particles::geometry::PointF;
 use crate::particles::Particles;
 use crate::particles::render::ParticleRender;
 use crate::particles::source::{ParticleModulation, ParticlePositionSource, ParticleSource};
+use crate::paused::PausedScreen;
 
 const MAX_PLAYERS: u32 = 2;
 
@@ -193,7 +195,7 @@ impl TetrisSdl {
             self.canvas.window().size(),
         )?;
 
-        let music = Music::from_file("resource/menu/main-menu.ogg")?;
+        let music = sdl2::mixer::Music::from_file("resource/menu/main-menu.ogg")?;
         music.play(-1)?;
         'menu: loop {
             let events = inputs.parse(self.event_pump.poll_iter());
@@ -257,7 +259,7 @@ impl TetrisSdl {
             None
         )?;
 
-        let music = Music::from_file("resource/menu/high-score.ogg")?;
+        let music = sdl2::mixer::Music::from_file("resource/menu/high-score.ogg")?;
         music.play(-1)?;
         'menu: loop {
             let events = inputs.parse(self.event_pump.poll_iter());
@@ -289,7 +291,7 @@ impl TetrisSdl {
             self.canvas.window().size(),
             Some(new_high_score)
         )?;
-        let music = Music::from_file("resource/menu/high-score.ogg")?;
+        let music = sdl2::mixer::Music::from_file("resource/menu/high-score.ogg")?;
         music.play(-1)?;
         'menu: loop {
             for key in inputs.parse(self.event_pump.poll_iter()) {
@@ -365,10 +367,11 @@ impl TetrisSdl {
             texture_refs.push((&mut textures.board, TextureMode::PlayerBoard(player)));
         }
 
-        let particle_scale = particles::scale::Scale::new(self.canvas.window().size());
+        let particle_scale = particles::scale::Scale::new(window_size);
         let mut particles = ParticleRender::new(Particles::new(10000), &self.texture_creator, particle_scale)?;
 
         themes.theme_mut().music().play(-1)?;
+        let paused_screen = PausedScreen::new(&mut self.canvas, &self.ttf, &self.texture_creator, window_size)?;
 
         let mut player_hard_drop_animations: HashMap<u32, HardDropAnimation> = HashMap::new();
         let mut t0 = SystemTime::now();
@@ -619,7 +622,7 @@ impl TetrisSdl {
             }
 
             if fixture.state().is_paused() {
-                themes.draw_paused(&mut self.canvas)?;
+                paused_screen.draw(&mut self.canvas)?;
             }
 
             self.canvas.present();

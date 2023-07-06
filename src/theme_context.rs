@@ -72,7 +72,6 @@ pub struct ScaledTheme<'a> {
     bg_source_snip: Rect,
     board_source_snip: Rect,
     player_themes: Vec<ThemedPlayer>,
-    pause_snip: Rect,
     scale: Scale,
 }
 
@@ -86,14 +85,11 @@ impl<'a> ScaledTheme<'a> {
         let player_themes = (0..players)
             .map(|pid| ThemedPlayer::new(pid + 1, theme.as_ref(), scale))
             .collect::<Vec<ThemedPlayer>>();
-        let paused_query = theme.pause_texture().query();
-        let pause_snip = scale.scaled_window_center_rect(paused_query.width, paused_query.height);
         Self {
             theme,
             bg_source_snip,
             board_source_snip,
             player_themes,
-            pause_snip,
             scale,
         }
     }
@@ -116,7 +112,6 @@ impl<'a> ScaledTheme<'a> {
 pub struct ThemeContext<'a> {
     current: usize,
     themes: [ScaledTheme<'a>; THEMES],
-    lighten_screen: Texture<'a>,
     fade_buffer: Texture<'a>,
     fade_duration: Option<Duration>,
 }
@@ -138,17 +133,6 @@ impl<'a> ThemeContext<'a> {
         let snes = snes_theme(canvas, texture_creator, config)?;
 
         let (window_width, window_height) = window_size;
-        let mut lighten_screen = texture_creator
-            .create_texture_target(None, window_width, window_height)
-            .map_err(|e| e.to_string())?;
-        lighten_screen.set_blend_mode(BlendMode::Blend);
-        canvas
-            .with_texture_canvas(&mut lighten_screen, |c| {
-                c.set_draw_color(Color::RGBA(255, 255, 255, 150));
-                c.clear();
-            })
-            .map_err(|e| e.to_string())?;
-
         let mut fade_buffer = texture_creator
             .create_texture_target(None, window_width, window_height)
             .map_err(|e| e.to_string())?;
@@ -158,7 +142,6 @@ impl<'a> ThemeContext<'a> {
             current: 0,
             themes: [game_boy, nes, snes]
                 .map(|theme| ScaledTheme::new(Box::new(theme), players, window_size)),
-            lighten_screen,
             fade_buffer,
             fade_duration: None,
         })
@@ -273,11 +256,5 @@ impl<'a> ThemeContext<'a> {
         }
 
         Ok(())
-    }
-
-    pub fn draw_paused(&self, canvas: &mut WindowCanvas) -> Result<(), String> {
-        let current = self.current();
-        canvas.copy(&self.lighten_screen, None, None)?;
-        canvas.copy(current.theme.pause_texture(), None, current.pause_snip)
     }
 }

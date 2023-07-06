@@ -7,40 +7,12 @@ use sdl2::ttf::{Font, GlyphMetrics, Sdl2TtfContext};
 use sdl2::video::WindowContext;
 use std::cmp::{max, min};
 use crate::event::HighScoreEntryEvent;
-use crate::font::FontType;
+use crate::font::{FontTexture, FontType};
 use crate::high_score::NewHighScore;
 
 const NAME_CHARACTERS: usize = 5;
 const CARET_HEIGHT: u32 = 2;
-
-struct FontTexture<'a> {
-    texture: Texture<'a>,
-    width: u32,
-    height: u32
-}
-
-impl<'a> FontTexture<'a> {
-    fn new(
-        font: &Font,
-        texture_creator: &'a TextureCreator<WindowContext>,
-        text: &str
-    ) -> Result<Self, String> {
-        let surface = font
-            .render(text)
-            .blended(Color::WHITE)
-            .map_err(|e| e.to_string())?;
-        let texture = texture_creator
-            .create_texture_from_surface(surface)
-            .map_err(|e| e.to_string())?;
-        let query = texture.query();
-
-        Ok(Self {
-            texture,
-            width: query.width,
-            height: query.height
-        })
-    }
-}
+const FONT_COLOR: Color = Color::WHITE;
 
 fn char_carets(font: &Font, text: &str) -> Result<Vec<Rect>, String> {
     let mut char_carets = vec![];
@@ -70,9 +42,9 @@ impl<'a> HighScoreTableRow<'a> {
     fn new(font: &Font, texture_creator: &'a TextureCreator<WindowContext>, ordinal: &str, name: &str, score: &str) -> Result<Self, String> {
         Ok(
             Self {
-                ordinal: FontTexture::new(font, texture_creator, ordinal)?,
-                name: FontTexture::new(font, texture_creator, name)?,
-                score: FontTexture::new(font, texture_creator, score)?,
+                ordinal: FontTexture::new(font, texture_creator, ordinal, FONT_COLOR)?,
+                name: FontTexture::new(font, texture_creator, name, FONT_COLOR)?,
+                score: FontTexture::new(font, texture_creator, score, FONT_COLOR)?,
             }
         )
     }
@@ -195,10 +167,9 @@ impl<'a, 'ttf> HighScoreRender<'a, 'ttf> {
         table: HighScoreTable,
         ttf: &'ttf Sdl2TtfContext,
         texture_creator: &'a TextureCreator<WindowContext>,
-        window_size: (u32, u32),
+        (window_width, window_height): (u32, u32),
         new_high_score: Option<NewHighScore>
     ) -> Result<Self, String> {
-        let (window_width, window_height) = window_size;
         let font_size = window_width / 32;
         let font_header = FontType::Bold.load(ttf, font_size)?;
         let font_body = FontType::Mono.load(ttf, font_size)?;
@@ -251,7 +222,7 @@ impl<'a, 'ttf> HighScoreRender<'a, 'ttf> {
         );
 
         let title_text = entry.as_ref().map(|e| e.title_text()).unwrap_or("High Scores".to_string());
-        let title = FontTexture::new(&font_title, texture_creator, &title_text)?;
+        let title = FontTexture::new(&font_title, texture_creator, &title_text, FONT_COLOR)?;
         let title_rect = Rect::new((window_width - title.width) as i32 / 2, padding as i32, title.width, title.height);
 
         Ok(Self {
@@ -295,7 +266,7 @@ impl<'a, 'ttf> HighScoreRender<'a, 'ttf> {
         let result = f(entry);
         if result.is_some() {
             let row = self.rows.get_mut(entry.ordinal + 1).unwrap();
-            row.name = FontTexture::new(&self.font, self.texture_creator, &entry.name()).unwrap();
+            row.name = FontTexture::new(&self.font, self.texture_creator, &entry.name(), FONT_COLOR).unwrap();
             entry.update_carets(&self.font).unwrap();
         }
         result

@@ -3,7 +3,10 @@ use crate::game::tetromino::Minos;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GameEvent {
-    Spawn,
+    Spawn {
+        player: u32,
+        minos: Minos,
+    },
     Fall,
     Move,
     SoftDrop,
@@ -13,9 +16,14 @@ pub enum GameEvent {
         dropped_rows: u32,
     },
     Rotate,
-    Lock,
+    Lock {
+        player: u32,
+        minos: Minos,
+        hard_or_soft_dropped: bool
+    },
     Destroy(DestroyLines),
     Destroyed {
+        player: u32,
         lines: DestroyLines,
         send_garbage_lines: u32,
         level_up: bool,
@@ -23,15 +31,26 @@ pub enum GameEvent {
     Hold,
     Paused,
     UnPaused,
-    GameOver(GameOverCondition),
-    Victory,
+    GameOver { player: u32, condition: GameOverCondition },
+    Victory { player: u32 },
     Quit,
     NextTheme,
-    ReceivedGarbage,
-    HighScorePreviousChar,
-    HighScoreNextChar,
-    HighScoreMoveChar,
-    HighScoreEntry,
+    ReceivedGarbage {
+        player: u32,
+        lines: u32
+    },
+    ReceivedGarbageLine {
+        player: u32,
+        line: u32
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HighScoreEntryEvent {
+    CursorRight,
+    CursorLeft,
+    ChangeChar,
+    Finished,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -40,6 +40,12 @@ impl Point {
     }
 }
 
+impl From<(i32, i32)> for Point {
+    fn from((x, y): (i32, i32)) -> Self {
+        Point::new(x, y)
+    }
+}
+
 impl Neg for Point {
     type Output = Point;
 
@@ -52,7 +58,7 @@ impl Sub for Point {
     type Output = Point;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        Point::new(rhs.x - self.x, rhs.y - self.y)
+        Point::new(self.x - rhs.x, self.y - rhs.y)
     }
 }
 

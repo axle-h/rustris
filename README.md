@@ -18,10 +18,4 @@ cargo build --release
 * critical music
 * game boy color theme
 * particles
-  * hard drop trail
-  * impact splatter
   * impact aurora (one big growing inverted alpha particle)
-  * line clear
-  * background
-  * level up
-* modern theme

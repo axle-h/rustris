@@ -4,7 +4,7 @@ use crate::theme::sound::{load_sound, play_sound};
 
 use crate::build_info::BUILD_INFO;
 use sdl2::image::LoadTexture;
-use sdl2::mixer::{Chunk, Music};
+use sdl2::mixer::Chunk;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
@@ -12,6 +12,7 @@ use sdl2::ttf::{Font, Sdl2TtfContext};
 use sdl2::video::WindowContext;
 use std::cmp::max;
 use std::collections::HashMap;
+use crate::font::FontType;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MenuAction<'a> {
@@ -28,6 +29,8 @@ pub struct Menu<'a> {
     caret_gutter: u32,
     current_row_id: usize,
     string_textures: HashMap<&'a str, Texture<'a>>,
+    title_texture: Texture<'a>,
+    title_rect: Rect,
     body_texture: Texture<'a>,
     caret_texture: Texture<'a>,
     watermark_texture: Texture<'a>,
@@ -36,7 +39,6 @@ pub struct Menu<'a> {
     name_width: u32,
     row_height: u32,
     menu_sound: Chunk,
-    menu_music: Music<'a>,
 }
 
 fn maybe_add_texture<'a>(
@@ -70,6 +72,7 @@ impl<'a> Menu<'a> {
         texture_creator: &'a TextureCreator<WindowContext>,
         config: Config,
         window_size: (u32, u32),
+        title_text: &str
     ) -> Result<Self, String> {
         assert!(!menu_items.is_empty());
 
@@ -79,7 +82,7 @@ impl<'a> Menu<'a> {
         let mut string_textures: HashMap<&'a str, Texture<'a>> = HashMap::new();
         let (window_width, window_height) = window_size;
         let font_size = window_width / 32;
-        let font = ttf.load_font("resource/menu/Roboto-Bold.ttf", font_size as u16)?;
+        let font = FontType::Handjet.load(ttf, font_size)?;
 
         let vertical_gutter = font_size / 3;
         let horizontal_gutter = font_size;
@@ -115,13 +118,13 @@ impl<'a> Menu<'a> {
             row_height * menu_items.len() as u32 + vertical_gutter * (menu_items.len() - 1) as u32;
         let body_width =
             caret_size + caret_gutter + max_name_width + horizontal_gutter + max_action_width;
-        let body_texture = texture_creator
+        let mut body_texture = texture_creator
             .create_texture_target(None, body_width, body_height)
             .map_err(|e| e.to_string())?;
+        body_texture.set_blend_mode(BlendMode::Blend);
 
         let watermark_font_size = font_size / 2;
-        let watermark_font =
-            ttf.load_font("resource/menu/Roboto-Bold.ttf", watermark_font_size as u16)?;
+        let watermark_font = FontType::Handjet.load(ttf, watermark_font_size)?;
         let watermark_surface = watermark_font
             .render(BUILD_INFO)
             .blended(Color::WHITE)
@@ -132,9 +135,26 @@ impl<'a> Menu<'a> {
             watermark_surface.width(),
             watermark_surface.height(),
         );
-        let watermark_texture = texture_creator
+        let mut watermark_texture = texture_creator
             .create_texture_from_surface(watermark_surface)
             .map_err(|e| e.to_string())?;
+        watermark_texture.set_blend_mode(BlendMode::Blend);
+
+        let title_font_size = window_width / 24;
+        let title_font = FontType::Handjet.load(ttf, title_font_size)?;
+        let title_surface = title_font
+            .render(title_text)
+            .blended(Color::WHITE)
+            .map_err(|e| e.to_string())?;
+        let title_rect = Rect::from_center(
+            Rect::new(0, vertical_gutter as i32, window_width, title_surface.height()).center(),
+            title_surface.width(),
+            title_surface.height()
+        );
+        let mut title_texture = texture_creator
+            .create_texture_from_surface(title_surface)
+            .map_err(|e| e.to_string())?;
+        title_texture.set_blend_mode(BlendMode::Blend);
 
         let result = Self {
             menu_items,
@@ -143,6 +163,8 @@ impl<'a> Menu<'a> {
             caret_gutter,
             current_row_id: 0,
             string_textures,
+            title_texture,
+            title_rect,
             body_texture,
             caret_texture,
             watermark_texture,
@@ -150,14 +172,9 @@ impl<'a> Menu<'a> {
             caret_size,
             name_width: max_name_width,
             row_height,
-            menu_sound: load_sound("menu", "chime", config)?,
-            menu_music: Music::from_file("resource/menu/music.ogg")?,
+            menu_sound: load_sound("menu", "chime", config)?
         };
         Ok(result)
-    }
-
-    pub fn play_music(&self) -> Result<(), String> {
-        self.menu_music.play(-1)
     }
 
     pub fn play_sound(&self) -> Result<(), String> {
@@ -250,10 +267,13 @@ impl<'a> Menu<'a> {
     }
 
     pub fn draw(&mut self, canvas: &mut WindowCanvas) -> Result<(), String> {
+        canvas.copy(&self.title_texture, None, self.title_rect)?;
+
         canvas
             .with_texture_canvas(&mut self.body_texture, |tc| {
                 tc.set_draw_color(Color::RGBA(0, 0, 0, 0));
                 tc.clear();
+
                 let mut y = 0;
                 for (row_id, (name, action)) in self.menu_items.iter().enumerate() {
                     let mut x = 0u32;

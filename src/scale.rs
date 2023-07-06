@@ -7,10 +7,11 @@ pub struct Scale {
     scale: u32,
     window_width: u32,
     window_height: u32,
+    block_size: u32
 }
 
 impl Scale {
-    pub fn new(players: u32, game_size: (u32, u32), window_size: (u32, u32)) -> Self {
+    pub fn new(players: u32, game_size: (u32, u32), window_size: (u32, u32), block_size: u32) -> Self {
         let (window_width, window_height) = window_size;
         let (bg_width, bg_height) = game_size;
         let scale = min(
@@ -22,9 +23,11 @@ impl Scale {
             scale,
             window_width,
             window_height,
+            block_size: block_size * scale
         }
     }
 
+    /// splits the entire window up into horizontally stacked chunks equally between players
     pub fn player_window(&self, player: u32) -> Rect {
         let player_chunk_width = self.window_width / self.players;
         let x = player_chunk_width * (player - 1);
@@ -61,10 +64,11 @@ impl Scale {
         )
     }
 
-    pub fn offset_scaled_rect(&self, rect: Rect, offset_x: f64, offset_y: f64) -> Rect {
+    pub fn offset_proportional_to_block_size(&self, rect: Rect, offset_x: f64, offset_y: f64) -> Rect {
+        let block_size = self.block_size as f64;
         Rect::new(
-            (rect.x as f64 + offset_x * self.scale as f64).round() as i32,
-            (rect.y as f64 + offset_y * self.scale as f64).round() as i32,
+            (rect.x as f64 + offset_x * block_size).round() as i32,
+            (rect.y as f64 + offset_y * block_size).round() as i32,
             rect.width(),
             rect.height(),
         )

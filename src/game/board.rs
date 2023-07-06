@@ -72,7 +72,7 @@ impl Board {
         self.blocks[index(point)] = state;
     }
 
-    pub fn try_spawn_tetromino(&mut self, shape: TetrominoShape) -> bool {
+    pub fn try_spawn_tetromino(&mut self, shape: TetrominoShape) -> Option<Minos> {
         let tetromino = Tetromino::new(shape);
         if self.tetromino.is_some() {
             panic!("tetromino already spawned")
@@ -90,14 +90,16 @@ impl Board {
                 );
             }
         }
+
         // regardless of success we have set blocks for this tetromino
         self.tetromino = Some(tetromino);
 
         if success {
             self.render_ghost();
+            Some(self.tetromino.unwrap().minos())
+        } else {
+            None
         }
-
-        success
     }
 
     /// Moves the current tetromino left if possible
@@ -146,10 +148,7 @@ impl Board {
         true
     }
 
-    fn mutate_tetromino<F>(&mut self, mut f: F)
-    where
-        F: FnMut(&mut Tetromino),
-    {
+    fn mutate_tetromino<F : FnMut(&mut Tetromino)>(&mut self, mut f: F) {
         // remove from board
         for p in self.tetromino.unwrap().minos() {
             self.set_block(p, BlockState::Empty);
@@ -317,9 +316,9 @@ impl Board {
     }
 
     /// Locks the current tetromino
-    pub fn lock(&mut self) {
+    pub fn lock(&mut self) -> Option<Minos> {
         if self.tetromino.is_none() {
-            return;
+            return None;
         }
         let tetromino = self.tetromino.unwrap();
         for (id, p) in tetromino.minos().into_iter().enumerate() {
@@ -328,7 +327,9 @@ impl Board {
                 BlockState::Stack(tetromino.shape(), tetromino.rotation(), id as u32),
             );
         }
-        self.tetromino = None
+        let result = tetromino.minos();
+        self.tetromino = None;
+        Some(result)
     }
 
     pub fn pattern(&self) -> DestroyLines {
@@ -478,7 +479,7 @@ mod tests {
     }
 
     fn can_spawn_tetromino(board: &mut Board, shape: TetrominoShape) {
-        assert!(board.try_spawn_tetromino(shape));
+        assert!(board.try_spawn_tetromino(shape).is_some());
     }
 
     fn should_have_tetromino_at(board: &Board, points: &[Point]) {

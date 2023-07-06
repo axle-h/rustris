@@ -88,7 +88,7 @@ impl<'a> HardDropAnimation<'a> {
             self.texture.set_alpha_mod(MAX_ALPHA - alpha_mod);
             canvas.copy(&self.texture, None, self.translated_snip(j as i32))?;
         }
-        self.texture.set_alpha_mod(255);
+        self.texture.set_alpha_mod(0xff);
         canvas.copy(&self.texture, None, self.snip)?;
 
         Ok(self.frame < self.max_frames)

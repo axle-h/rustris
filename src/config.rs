@@ -239,18 +239,30 @@ impl MatchRules {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MatchThemes {
+    /// Run themes in order, switching at the next level
+    All,
+    GameBoy,
+    Nes,
+    Snes,
+    Modern
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GameConfig {
     pub players: u32,
     pub level: u32,
     pub rules: MatchRules,
+    pub themes: MatchThemes
 }
 
 impl GameConfig {
-    pub fn new(players: u32, level: u32, rules: MatchRules) -> Self {
+    pub fn new(players: u32, level: u32, rules: MatchRules, themes: MatchThemes) -> Self {
         Self {
             players,
             level,
             rules,
+            themes
         }
     }
 }

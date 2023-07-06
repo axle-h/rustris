@@ -1,17 +1,15 @@
-use crate::config::Config;
+use crate::config::{Config, GameConfig, MatchThemes};
 use crate::game::tetromino::Minos;
 use crate::scale::Scale;
-use crate::theme::nes::nes_theme;
-use crate::theme::snes::snes_theme;
 use crate::theme::Theme;
-use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::video::WindowContext;
 use std::time::Duration;
+use sdl2::ttf::Sdl2TtfContext;
+use crate::theme::all::AllThemes;
 
 const THEME_FADE_DURATION: Duration = Duration::from_millis(1000);
-const THEMES: usize = 3;
 
 pub struct PlayerTextures<'a> {
     pub background: Texture<'a>,
@@ -54,7 +52,7 @@ struct ThemedPlayer {
 }
 
 impl ThemedPlayer {
-    pub fn new(player: u32, theme: &dyn Theme, scale: Scale) -> Self {
+    pub fn new(player: u32, theme: &Theme, scale: Scale) -> Self {
         let (theme_width, theme_height) = theme.background_size();
         let mut bg_snip = scale.scale_rect(Rect::new(0, 0, theme_width, theme_height));
         bg_snip.center_on(scale.player_window(player).center());
@@ -68,38 +66,34 @@ impl ThemedPlayer {
 }
 
 pub struct ScaledTheme<'a> {
-    theme: Box<dyn Theme + 'a>,
+    theme: &'a Theme<'a>,
     bg_source_snip: Rect,
     board_source_snip: Rect,
     player_themes: Vec<ThemedPlayer>,
-    pause_snip: Rect,
     scale: Scale,
 }
 
 impl<'a> ScaledTheme<'a> {
-    fn new(theme: Box<dyn Theme + 'a>, players: u32, window_size: (u32, u32)) -> Self {
-        let scale = Scale::new(players, theme.background_size(), window_size);
+    fn new(theme: &'a Theme, players: u32, window_size: (u32, u32)) -> Self {
+        let scale = Scale::new(players, theme.background_size(), window_size, theme.geometry().block_size());
         let (theme_width, theme_height) = theme.background_size();
         let bg_source_snip = Rect::new(0, 0, theme_width, theme_height);
         let board_rect = theme.board_snip();
         let board_source_snip = Rect::new(0, 0, board_rect.width(), board_rect.height());
         let player_themes = (0..players)
-            .map(|pid| ThemedPlayer::new(pid + 1, theme.as_ref(), scale))
+            .map(|pid| ThemedPlayer::new(pid + 1, &theme, scale))
             .collect::<Vec<ThemedPlayer>>();
-        let paused_query = theme.pause_texture().query();
-        let pause_snip = scale.scaled_window_center_rect(paused_query.width, paused_query.height);
         Self {
             theme,
             bg_source_snip,
             board_source_snip,
             player_themes,
-            pause_snip,
             scale,
         }
     }
 
     pub fn mino_rects(&self, player_id: u32, minos: Minos) -> [Rect; 4] {
-        let rects = self.theme.mino_rects(minos);
+        let rects = self.theme.geometry().mino_rects(minos);
         let player_board = &self.player_themes[player_id as usize - 1].board_snip;
         rects.map(|rect| {
             self.scale
@@ -108,70 +102,45 @@ impl<'a> ScaledTheme<'a> {
     }
 
     pub fn rows_to_pixels(&self, value: u32) -> u32 {
-        let raw_pixels = self.theme.block_size() * value;
+        let raw_pixels = self.theme.geometry().block_size() * value;
         self.scale.scale_length(raw_pixels)
     }
 }
 
 pub struct ThemeContext<'a> {
     current: usize,
-    themes: [ScaledTheme<'a>; THEMES],
-    lighten_screen: Texture<'a>,
-    darken_screen: Texture<'a>,
+    themes: Vec<ScaledTheme<'a>>,
     fade_buffer: Texture<'a>,
     fade_duration: Option<Duration>,
 }
 
 impl<'a> ThemeContext<'a> {
     pub fn new(
-        canvas: &mut WindowCanvas,
+        all_themes: &'a AllThemes,
         texture_creator: &'a TextureCreator<WindowContext>,
-        players: u32,
+        game_config: GameConfig,
         window_size: (u32, u32),
-        config: Config,
     ) -> Result<Self, String> {
-        let game_boy = config
-            .theme
-            .game_boy_palette
-            .theme(canvas, texture_creator, config)?;
-        //let game_boy_green = GameBoyPalette::GreenSoup.theme(canvas, texture_creator, config)?;
-        let nes = nes_theme(canvas, texture_creator, config)?;
-        let snes = snes_theme(canvas, texture_creator, config)?;
-
         let (window_width, window_height) = window_size;
-        let mut lighten_screen = texture_creator
-            .create_texture_target(None, window_width, window_height)
-            .map_err(|e| e.to_string())?;
-        lighten_screen.set_blend_mode(BlendMode::Blend);
-        canvas
-            .with_texture_canvas(&mut lighten_screen, |c| {
-                c.set_draw_color(Color::RGBA(255, 255, 255, 150));
-                c.clear();
-            })
-            .map_err(|e| e.to_string())?;
-
-        let mut darken_screen = texture_creator
-            .create_texture_target(None, window_width, window_height)
-            .map_err(|e| e.to_string())?;
-        darken_screen.set_blend_mode(BlendMode::Blend);
-        canvas
-            .with_texture_canvas(&mut darken_screen, |c| {
-                c.set_draw_color(Color::RGBA(0, 0, 0, 200));
-                c.clear();
-            })
-            .map_err(|e| e.to_string())?;
 
         let mut fade_buffer = texture_creator
             .create_texture_target(None, window_width, window_height)
             .map_err(|e| e.to_string())?;
         fade_buffer.set_blend_mode(BlendMode::Blend);
 
+
+        let current = match game_config.themes {
+            MatchThemes::All | MatchThemes::GameBoy => 0,
+            MatchThemes::Nes => 1,
+            MatchThemes::Snes => 2,
+            MatchThemes::Modern => 3
+        };
+
         Ok(Self {
-            current: 0,
-            themes: [game_boy, nes, snes]
-                .map(|theme| ScaledTheme::new(Box::new(theme), players, window_size)),
-            lighten_screen,
-            darken_screen,
+            current,
+            themes: all_themes.all().iter()
+                .map(|theme| ScaledTheme::new(theme, game_config.players, window_size))
+                .collect(),
             fade_buffer,
             fade_duration: None,
         })
@@ -194,16 +163,35 @@ impl<'a> ThemeContext<'a> {
         (width, height)
     }
 
-    pub fn theme_mut(&mut self) -> &mut dyn Theme {
-        self.themes[self.current].theme.as_mut()
-    }
-
-    pub fn theme(&self) -> &dyn Theme {
-        self.themes[self.current].theme.as_ref()
+    pub fn theme(&self) -> &Theme<'a> {
+        &self.themes[self.current].theme
     }
 
     pub fn scale(&self) -> &Scale {
         &self.themes[self.current].scale
+    }
+
+    pub fn player_line_snip(&self, player: u32, j: u32) -> Rect {
+        let theme = &self.themes[self.current];
+        let player = theme.player_themes.get(player as usize - 1).unwrap();
+        theme.scale.scale_and_offset_rect(
+            theme.theme.geometry().line_snip(j),
+            player.board_snip.x(),
+            player.board_snip.y()
+        )
+    }
+
+    pub fn player_mino_snips(&self, player: u32, minos: Minos) -> [Rect; 4] {
+        let theme = &self.themes[self.current];
+        let player = theme.player_themes.get(player as usize - 1).unwrap();
+        theme.theme.geometry().mino_rects(minos)
+            .map(|r| theme.scale.scale_and_offset_rect(
+                r, player.board_snip.x(), player.board_snip.y()))
+    }
+
+    pub fn player_board_snip(&self, player: u32) -> Rect {
+        let theme = &self.themes[self.current];
+        theme.player_themes.get(player as usize - 1).unwrap().board_snip
     }
 
     pub fn current(&self) -> &ScaledTheme {
@@ -211,7 +199,7 @@ impl<'a> ThemeContext<'a> {
     }
 
     pub fn next(&mut self) {
-        self.current = (self.current + 1) % THEMES;
+        self.current = (self.current + 1) % self.themes.len();
     }
 
     pub fn start_fade(&mut self, canvas: &mut WindowCanvas) -> Result<(), String> {
@@ -230,6 +218,10 @@ impl<'a> ThemeContext<'a> {
 
     pub fn is_fading(&self) -> bool {
         self.fade_duration.is_some()
+    }
+
+    pub fn render_bg_particles(&self) -> bool {
+        self.current().theme.particle_color().is_some()
     }
 
     pub fn draw_current(
@@ -252,7 +244,7 @@ impl<'a> ThemeContext<'a> {
                     let dst =
                         current
                             .scale
-                            .offset_scaled_rect(player.board_snip, offset_x, offset_y);
+                            .offset_proportional_to_block_size(player.board_snip, offset_x, offset_y);
                     canvas.copy(texture, current.board_source_snip, dst)?;
                 }
             }
@@ -276,20 +268,5 @@ impl<'a> ThemeContext<'a> {
         }
 
         Ok(())
-    }
-
-    pub fn draw_hide_game(&self, canvas: &mut WindowCanvas) -> Result<(), String> {
-        let texture = if self.theme().text_is_dark() {
-            &self.lighten_screen
-        } else {
-            &self.darken_screen
-        };
-        canvas.copy(texture, None, None)
-    }
-
-    pub fn draw_paused(&self, canvas: &mut WindowCanvas) -> Result<(), String> {
-        let current = self.current();
-        canvas.copy(&self.lighten_screen, None, None)?;
-        canvas.copy(current.theme.pause_texture(), None, current.pause_snip)
     }
 }

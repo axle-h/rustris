@@ -1,6 +1,5 @@
-pub mod entry;
 pub mod table;
-pub mod view;
+pub mod render;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NewHighScore {

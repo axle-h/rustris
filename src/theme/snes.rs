@@ -1,59 +1,75 @@
 use crate::animation::destroy::DestroyAnimationType;
 use crate::animation::game_over::GameOverAnimationType;
 use crate::config::Config;
-use crate::theme::block_theme::{BlockTheme, BlockThemeOptions, TetrominoSnips, VISIBLE_BUFFER};
+use crate::theme::retro::{RetroThemeOptions, retro_theme};
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
 use sdl2::render::{TextureCreator, WindowCanvas};
 use sdl2::video::WindowContext;
+use crate::theme::font::{alpha_sprites, FontRenderOptions, MetricSnips};
+use crate::theme::geometry::VISIBLE_BUFFER;
+use crate::theme::sound::SoundThemeOptions;
+use crate::theme::sprite_sheet::TetrominoSpriteSheetMeta;
+use crate::theme::{Theme, ThemeName};
 
 const ALPHA_WIDTH: u32 = 7;
 const ALPHA_HEIGHT: u32 = 8;
 const BLOCK_PIXELS: u32 = 8;
 const BUFFER_PIXELS: u32 = VISIBLE_BUFFER * BLOCK_PIXELS;
 
-fn block_snip(i: i32, j: i32) -> Rect {
-    Rect::new(
-        i * BLOCK_PIXELS as i32,
-        j * BLOCK_PIXELS as i32,
-        BLOCK_PIXELS,
-        BLOCK_PIXELS,
-    )
+fn mino(i: i32, j: i32) -> Point {
+    Point::new(i * BLOCK_PIXELS as i32, j * BLOCK_PIXELS as i32)
 }
 
-fn char_snip(row: i32, col: i32) -> Rect {
-    Rect::new(col * 8, 35 + row * 9, ALPHA_WIDTH, ALPHA_HEIGHT)
+fn char_snip(row: i32, col: i32) -> Point {
+    Point::new(col * 8, 35 + row * 9)
 }
 
 pub fn snes_theme<'a>(
     canvas: &mut WindowCanvas,
     texture_creator: &'a TextureCreator<WindowContext>,
     config: Config,
-) -> Result<BlockTheme<'a>, String> {
-    let options = BlockThemeOptions::new(
-        "snes".to_string(),
+) -> Result<Theme<'a>, String> {
+    let options = RetroThemeOptions::new(
+        ThemeName::Snes,
         config,
-        "sprites.png".to_string(),
-        "background.png".to_string(),
-        "board.png".to_string(),
-        "game-over.png".to_string(),
-        "paused.png".to_string(),
-        0x60,
-        BLOCK_PIXELS,
-        (ALPHA_WIDTH, ALPHA_HEIGHT),
-        2,
-        false,
-        char_snip(0, 11),
-        (0..26)
-            .map(|i| char_snip(1, i))
-            .collect::<Vec<Rect>>()
-            .try_into()
-            .unwrap(),
-        (0..10)
-            .map(|i| char_snip(0, i))
-            .collect::<Vec<Rect>>()
-            .try_into()
-            .unwrap(),
+        TetrominoSpriteSheetMeta::new(
+            "resource/snes/sprites.png",
+            BLOCK_PIXELS,
+            (
+                mino(1, 1),
+                mino(1, 0),
+            ),
+            (
+                mino(3, 1),
+                mino(3, 0),
+            ),
+            (
+                mino(2, 1),
+                mino(2, 0),
+            ),
+            (
+                mino(0, 1),
+                mino(0, 0),
+            ),
+            (
+                mino(2, 1),
+                mino(2, 0),
+            ),
+            (
+                mino(0, 1),
+                mino(0, 0),
+            ),
+            (
+                mino(3, 1),
+                mino(3, 0),
+            ),
+            mino(0, 0),
+            0x50
+        ),
+        "resource/snes/background.png",
+        "resource/snes/board.png",
+        "resource/snes/game-over.png",
         [
             Rect::new(168, 17 + BUFFER_PIXELS as i32, 32, 32),
             Rect::new(168, 58 + BUFFER_PIXELS as i32, 32, 32),
@@ -62,81 +78,24 @@ pub fn snes_theme<'a>(
             Rect::new(168, 130 + BUFFER_PIXELS as i32, 32, 32),
         ],
         Rect::new(19, 133 + BUFFER_PIXELS as i32, 32, 32),
-        (0..6)
-            .map(|i| {
-                Rect::new(
-                    7 + i * (ALPHA_WIDTH as i32 + 1),
-                    22,
-                    ALPHA_WIDTH,
-                    ALPHA_WIDTH,
-                )
-            })
-            .rev()
-            .collect(),
-        (0..3)
-            .map(|i| {
-                Rect::new(
-                    23 + i * (ALPHA_WIDTH as i32 + 1),
-                    62,
-                    ALPHA_WIDTH,
-                    ALPHA_WIDTH,
-                )
-            })
-            .rev()
-            .collect(),
-        (0..3)
-            .map(|i| {
-                Rect::new(
-                    23 + i * (ALPHA_WIDTH as i32 + 1),
-                    98,
-                    ALPHA_WIDTH,
-                    ALPHA_WIDTH,
-                )
-            })
-            .rev()
-            .collect(),
-        true,
+        FontRenderOptions::Sprites {
+            file: "resource/snes/sprites.png".to_string(),
+            sprites: alpha_sprites(
+                (0 .. 10).map(|i| char_snip(0, i)).collect::<Vec<Point>>().try_into().unwrap(),
+                ALPHA_WIDTH,
+                ALPHA_HEIGHT
+            ),
+            spacing: 1
+        },
+        MetricSnips::zero_fill((7, 22), 999999),
+        MetricSnips::zero_fill((23, 62), 999),
+        MetricSnips::zero_fill((23, 98), 999),
         Point::new(62, 0),
         Point::new(8, 0),
-        TetrominoSnips::uniform_stack(
-            Rect::new(143, 26, BLOCK_PIXELS * 4, BLOCK_PIXELS),
-            block_snip(1, 1),
-            block_snip(1, 0),
-        ),
-        TetrominoSnips::uniform_stack(
-            Rect::new(118, 18, BLOCK_PIXELS * 3, BLOCK_PIXELS * 2),
-            block_snip(3, 1),
-            block_snip(3, 0),
-        ),
-        TetrominoSnips::uniform_stack(
-            Rect::new(93, 18, BLOCK_PIXELS * 3, BLOCK_PIXELS * 2),
-            block_snip(2, 1),
-            block_snip(2, 0),
-        ),
-        TetrominoSnips::uniform_stack(
-            Rect::new(1, 18, BLOCK_PIXELS * 2, BLOCK_PIXELS * 2),
-            block_snip(0, 1),
-            block_snip(0, 0),
-        ),
-        TetrominoSnips::uniform_stack(
-            Rect::new(43, 18, BLOCK_PIXELS * 3, BLOCK_PIXELS * 2),
-            block_snip(2, 1),
-            block_snip(2, 0),
-        ),
-        TetrominoSnips::uniform_stack(
-            Rect::new(68, 18, BLOCK_PIXELS * 3, BLOCK_PIXELS * 2),
-            block_snip(0, 1),
-            block_snip(0, 0),
-        ),
-        TetrominoSnips::uniform_stack(
-            Rect::new(18, 18, BLOCK_PIXELS * 3, BLOCK_PIXELS * 2),
-            block_snip(3, 1),
-            block_snip(3, 0),
-        ),
-        block_snip(0, 0),
         Color::RGB(0x74, 0x74, 0x74),
         DestroyAnimationType::Sweep,
         GameOverAnimationType::CurtainDown,
+        SoundThemeOptions::default("snes", config.audio)
     );
-    BlockTheme::new(canvas, texture_creator, options)
+    retro_theme(canvas, texture_creator, options)
 }

@@ -13,17 +13,20 @@ mod player;
 mod scale;
 mod theme;
 mod theme_context;
+mod particles;
+mod font;
+mod paused;
+mod frame_rate;
 
 extern crate sdl2;
 
 use crate::animation::game_over::GameOverAnimate;
 use crate::animation::hard_drop::HardDropAnimation;
-use crate::config::{Config, GameConfig, MatchRules, VideoMode};
-use crate::event::GameEvent;
+use crate::config::{Config, GameConfig, MatchRules, MatchThemes, VideoMode};
+use crate::event::{GameEvent, HighScoreEntryEvent};
 use crate::game_input::GameInputKey;
-use crate::high_score::entry::HighScoreEntry;
 use crate::high_score::table::HighScoreTable;
-use crate::high_score::view::HighScoreTableView;
+use crate::high_score::render::HighScoreRender;
 use crate::menu::{Menu, MenuAction};
 use crate::menu_input::{MenuInputContext, MenuInputKey};
 use crate::player::MatchState;
@@ -40,10 +43,25 @@ use sdl2::video::WindowContext;
 use sdl2::{AudioSubsystem, EventPump, Sdl};
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
+use sdl2::rect::Rect;
 use theme_context::{PlayerTextures, TextureMode, ThemeContext};
+use crate::build_info::APP_NAME;
+use crate::frame_rate::FrameRate;
+use crate::high_score::NewHighScore;
+use crate::particles::geometry::Vec2D;
+use crate::particles::Particles;
+use crate::particles::prescribed::{prescribed_fireworks, prescribed_orbit, prescribed_tetromino_race, PrescribedParticles};
+use crate::particles::render::ParticleRender;
+use crate::particles::source::{ParticleModulation, ParticlePositionSource, ParticleSource};
+use crate::paused::PausedScreen;
+use crate::theme::all::AllThemes;
+use crate::theme::sound::{load_sound, play_sound};
+use crate::theme::sprite_sheet::{FlatTetrominoSpriteSheet, MinoType};
 
 const MAX_PLAYERS: u32 = 2;
+const MAX_PARTICLES_PER_PLAYER: usize = 100000;
+const MAX_BACKGROUND_PARTICLES: usize = 100000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum MainMenuAction {
@@ -59,7 +77,7 @@ struct TetrisSdl {
     canvas: WindowCanvas,
     event_pump: EventPump,
     _audio: AudioSubsystem,
-    texture_creator: TextureCreator<WindowContext>,
+    particle_scale: particles::scale::Scale
 }
 
 impl TetrisSdl {
@@ -86,7 +104,7 @@ impl TetrisSdl {
             _ => (1, 1),
         };
 
-        let mut window_builder = video.window("Tetris", width, height);
+        let mut window_builder = video.window(APP_NAME, width, height);
         match config.video.mode {
             VideoMode::FullScreen { .. } => {
                 window_builder.fullscreen();
@@ -115,7 +133,6 @@ impl TetrisSdl {
         .build()
         .map_err(|e| e.to_string())?;
 
-        let texture_creator = canvas.texture_creator();
         let event_pump = sdl.event_pump()?;
 
         let audio = sdl.audio()?;
@@ -132,13 +149,29 @@ impl TetrisSdl {
             canvas,
             event_pump,
             _audio: audio,
-            texture_creator,
+            particle_scale: particles::scale::Scale::new((width, height))
         })
     }
 
-    pub fn main_menu(&mut self, game_config: Option<GameConfig>) -> Result<Option<MainMenuAction>, String> {
+    fn orbit_particle_source(&self) -> Box<dyn ParticleSource> {
+        let (window_width, window_height) = self.canvas.window().size();
+        prescribed_orbit(Rect::new(0, 0, window_width, window_height), &self.particle_scale)
+    }
+
+    fn tetromino_race_particle_source(&self) -> Box<dyn ParticleSource> {
+        let (window_width, window_height) = self.canvas.window().size();
+        prescribed_tetromino_race(Rect::new(0, 0, window_width, window_height), &self.particle_scale)
+    }
+
+    fn fireworks_particle_source(&self) -> Box<dyn ParticleSource> {
+        let (window_width, window_height) = self.canvas.window().size();
+        prescribed_fireworks(Rect::new(0, 0, window_width, window_height), &self.particle_scale)
+    }
+
+    pub fn main_menu(&mut self, game_config: Option<GameConfig>, particles: &mut ParticleRender) -> Result<Option<MainMenuAction>, String> {
+        let texture_creator = self.canvas.texture_creator();
         let mut game_config = match game_config {
-            None => GameConfig::new(1, 0, MatchRules::Battle),
+            None => GameConfig::new(1, 0, MatchRules::Battle, MatchThemes::All),
             Some(config) => config
         };
         let inputs = MenuInputContext::new(self.config.input);
@@ -148,6 +181,19 @@ impl TetrisSdl {
                 MenuAction::SelectList {
                     items: vec!["1", "2"],
                     current: game_config.players as usize - 1,
+                },
+            ),
+            (
+                "themes",
+                MenuAction::SelectList {
+                    items: vec!["all", "gameboy", "nes", "snes", "modern"],
+                    current: match game_config.themes {
+                        MatchThemes::All => 0,
+                        MatchThemes::GameBoy => 1,
+                        MatchThemes::Nes => 2,
+                        MatchThemes::Snes => 3,
+                        MatchThemes::Modern => 4
+                    },
                 },
             ),
             (
@@ -181,12 +227,22 @@ impl TetrisSdl {
         let mut menu = Menu::new(
             menu_items,
             &self.ttf,
-            &self.texture_creator,
+            &texture_creator,
             self.config,
             self.canvas.window().size(),
+            &APP_NAME.to_uppercase()
         )?;
-        menu.play_music()?;
+
+        particles.clear();
+        particles.add_source(self.tetromino_race_particle_source());
+
+        let mut frame_rate = FrameRate::new();
+
+        let music = sdl2::mixer::Music::from_file("resource/menu/main-menu.ogg")?;
+        music.play(-1)?;
         'menu: loop {
+            let delta = frame_rate.update()?;
+
             let events = inputs.parse(self.event_pump.poll_iter());
             if events.contains(&MenuInputKey::Quit) {
                 return Ok(None);
@@ -203,6 +259,16 @@ impl TetrisSdl {
                     None => {}
                     Some((name, action)) => match name {
                         "players" => game_config.players = action.parse::<u32>().unwrap(),
+                        "themes" => {
+                            game_config.themes = match action {
+                                "all" => MatchThemes::All,
+                                "gameboy" => MatchThemes::GameBoy,
+                                "nes" => MatchThemes::Nes,
+                                "snes" => MatchThemes::Snes,
+                                "modern" => MatchThemes::Modern,
+                                _ => unreachable!(),
+                            }
+                        },
                         "mode" => {
                             game_config.rules = match action {
                                 "battle" => MatchRules::Battle,
@@ -224,6 +290,11 @@ impl TetrisSdl {
             self.canvas.set_draw_color(Color::BLACK);
             self.canvas.clear();
 
+            // particles
+            particles.update(delta);
+            particles.draw(&mut self.canvas)?;
+
+            // menu
             menu.draw(&mut self.canvas)?;
 
             self.canvas.present();
@@ -233,20 +304,32 @@ impl TetrisSdl {
         }))
     }
 
-    pub fn view_high_score(&mut self) -> Result<(), String> {
+    pub fn view_high_score(&mut self, particles: &mut ParticleRender) -> Result<(), String> {
+        let texture_creator = self.canvas.texture_creator();
         let inputs = MenuInputContext::new(self.config.input);
         let high_scores = HighScoreTable::load()?;
         if high_scores.entries().is_empty() {
             return Ok(());
         }
 
-        let mut view = HighScoreTableView::new(
+        let mut view = HighScoreRender::new(
             high_scores,
             &self.ttf,
-            &self.texture_creator,
+            &texture_creator,
             self.canvas.window().size(),
+            None
         )?;
+
+        particles.clear();
+        particles.add_source(self.fireworks_particle_source());
+
+        let mut frame_rate = FrameRate::new();
+
+        let music = sdl2::mixer::Music::from_file("resource/menu/high-score.ogg")?;
+        music.play(-1)?;
         'menu: loop {
+            let delta = frame_rate.update()?;
+
             let events = inputs.parse(self.event_pump.poll_iter());
             if !events.is_empty() {
                 // any button press
@@ -255,6 +338,10 @@ impl TetrisSdl {
             self.canvas.set_draw_color(Color::BLACK);
             self.canvas.clear();
 
+            // particles
+            particles.update(delta);
+            particles.draw(&mut self.canvas)?;
+
             view.draw(&mut self.canvas)?;
 
             self.canvas.present();
@@ -262,22 +349,89 @@ impl TetrisSdl {
         Ok(())
     }
 
-    pub fn game(&mut self, game_config: GameConfig) -> Result<(), String> {
+    pub fn new_high_score(&mut self, new_high_score: NewHighScore, particles: &mut ParticleRender) -> Result<(), String> {
+        let texture_creator = self.canvas.texture_creator();
+        let inputs = MenuInputContext::new(self.config.input);
+        let high_scores = HighScoreTable::load()?;
+        if high_scores.entries().is_empty() {
+            return Ok(());
+        }
+
+        let mut table = HighScoreRender::new(
+            high_scores,
+            &self.ttf,
+            &texture_creator,
+            self.canvas.window().size(),
+            Some(new_high_score)
+        )?;
+
+        particles.clear();
+        particles.add_source(self.fireworks_particle_source());
+
+        let mut frame_rate = FrameRate::new();
+
+        let music = sdl2::mixer::Music::from_file("resource/menu/high-score.ogg")?;
+        let sound = load_sound("menu", "chime", self.config)?;
+        music.play(-1)?;
+        'menu: loop {
+            let delta = frame_rate.update()?;
+
+            for key in inputs.parse(self.event_pump.poll_iter()) {
+                let event = match key {
+                    MenuInputKey::Up => table.up(),
+                    MenuInputKey::Down => table.down(),
+                    MenuInputKey::Left => table.left(),
+                    MenuInputKey::Right => table.right(),
+                    MenuInputKey::Start => break 'menu,
+                    MenuInputKey::Quit => return Ok(()),
+                    _ => None
+                };
+                if event.is_none() {
+                    continue;
+                }
+                match event.unwrap() {
+                    HighScoreEntryEvent::Finished => break 'menu,
+                    _ => play_sound(&sound)?
+                }
+            };
+
+            self.canvas.set_draw_color(Color::BLACK);
+            self.canvas.clear();
+
+            // particles
+            particles.update(delta);
+            particles.draw(&mut self.canvas)?;
+
+            table.draw(&mut self.canvas)?;
+
+            self.canvas.present();
+        }
+
+        if let Some(new_entry) = table.new_entry() {
+            let mut high_scores = HighScoreTable::load().unwrap();
+            high_scores.add_high_score(new_entry);
+            high_scores.save()
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn game(&mut self, game_config: GameConfig, all_themes: &AllThemes, bg_particles: &mut ParticleRender, fg_particles: &mut ParticleRender) -> Result<Option<NewHighScore>, String> {
+        let texture_creator = self.canvas.texture_creator();
         let mut inputs = GameInputContext::new(self.config.input);
         let mut fixture = Match::new(game_config, self.config);
         let window_size = self.canvas.window().size();
         let mut themes = ThemeContext::new(
-            &mut self.canvas,
-            &self.texture_creator,
-            game_config.players,
+            all_themes,
+            &texture_creator,
+            game_config,
             window_size,
-            self.config,
         )?;
 
         let mut player_textures = (0..game_config.players)
             .map(|_| {
                 PlayerTextures::new(
-                    &self.texture_creator,
+                    &texture_creator,
                     themes.max_background_size(),
                     themes.max_board_size(),
                 )
@@ -296,16 +450,21 @@ impl TetrisSdl {
             texture_refs.push((&mut textures.board, TextureMode::PlayerBoard(player)));
         }
 
-        themes.theme_mut().music().play(-1)?;
+        fg_particles.clear();
+        bg_particles.clear();
+        bg_particles.add_source(self.orbit_particle_source());
 
-        let mut high_score_entry: Option<HighScoreEntry> = None;
+        themes.theme().music().play(-1)?;
+        let paused_screen = PausedScreen::new(&mut self.canvas, &self.ttf, &texture_creator, window_size)?;
+
         let mut player_hard_drop_animations: HashMap<u32, HardDropAnimation> = HashMap::new();
-        let mut t0 = SystemTime::now();
         let mut max_level = 0;
+        let mut frame_rate = FrameRate::new();
+
         'game: loop {
-            let now = SystemTime::now();
-            let delta = now.duration_since(t0).map_err(|e| e.to_string())?;
-            t0 = now;
+            let delta = frame_rate.update()?;
+
+            let mut to_emit_particles = vec![];
 
             fixture.unset_flags();
             for hard_dropping_player in player_hard_drop_animations.keys() {
@@ -314,54 +473,34 @@ impl TetrisSdl {
             let events = inputs
                 .update(delta, self.event_pump.poll_iter())
                 .into_iter()
-                .flat_map(|input| match high_score_entry.as_mut() {
-                    None => match input {
-                        GameInputKey::MoveLeft { player } => fixture.mut_game(player, |g| g.left()),
-                        GameInputKey::MoveRight { player } => {
-                            fixture.mut_game(player, |g| g.right())
-                        }
-                        GameInputKey::SoftDrop { player } => {
-                            fixture.mut_game(player, |g| g.set_soft_drop(true))
-                        }
-                        GameInputKey::HardDrop { player } => {
-                            fixture.mut_game(player, |g| g.hard_drop())
-                        }
-                        GameInputKey::RotateClockwise { player } => {
-                            fixture.mut_game(player, |g| g.rotate(true))
-                        }
-                        GameInputKey::RotateAnticlockwise { player } => {
-                            fixture.mut_game(player, |g| g.rotate(false))
-                        }
-                        GameInputKey::Hold { player } => fixture.mut_game(player, |g| g.hold()),
-                        GameInputKey::Pause => match fixture.state() {
-                            MatchState::Normal | MatchState::Paused => fixture.toggle_paused(),
-                            _ => Some(GameEvent::Quit),
-                        },
-                        GameInputKey::Quit => Some(GameEvent::Quit),
-                        GameInputKey::NextTheme => Some(GameEvent::NextTheme),
+                .flat_map(|input| match input {
+                    GameInputKey::MoveLeft { player } => fixture.mut_game(player, |g| g.left()),
+                    GameInputKey::MoveRight { player } => {
+                        fixture.mut_game(player, |g| g.right())
+                    }
+                    GameInputKey::SoftDrop { player } => {
+                        fixture.mut_game(player, |g| g.set_soft_drop(true))
+                    }
+                    GameInputKey::HardDrop { player } => {
+                        fixture.mut_game(player, |g| g.hard_drop())
+                    }
+                    GameInputKey::RotateClockwise { player } => {
+                        fixture.mut_game(player, |g| g.rotate(true))
+                    }
+                    GameInputKey::RotateAnticlockwise { player } => {
+                        fixture.mut_game(player, |g| g.rotate(false))
+                    }
+                    GameInputKey::Hold { player } => fixture.mut_game(player, |g| g.hold()),
+                    GameInputKey::Pause => match fixture.state() {
+                        MatchState::Normal | MatchState::Paused => fixture.toggle_paused(),
+                        _ => Some(GameEvent::Quit),
                     },
-                    Some(entry) => match input {
-                        GameInputKey::MoveLeft { player } if player == entry.player() => {
-                            entry.left()
-                        }
-                        GameInputKey::MoveRight { player } if player == entry.player() => {
-                            entry.right()
-                        }
-                        GameInputKey::RotateClockwise { player } if player == entry.player() => {
-                            entry.down()
-                        }
-                        GameInputKey::RotateAnticlockwise { player }
-                            if player == entry.player() =>
-                        {
-                            entry.up()
-                        }
-                        GameInputKey::Quit => Some(GameEvent::Quit),
-                        _ => None,
-                    },
+                    GameInputKey::Quit => Some(GameEvent::Quit),
+                    GameInputKey::NextTheme => Some(GameEvent::NextTheme),
                 })
                 .collect::<Vec<GameEvent>>();
 
-            for event in events.iter() {
+            for event in events.into_iter() {
                 match event {
                     GameEvent::Quit => break 'game,
                     GameEvent::Paused => sdl2::mixer::Music::pause(),
@@ -373,11 +512,11 @@ impl TetrisSdl {
                         // handle music
                         match fixture.state() {
                             MatchState::Normal => {
-                                themes.theme_mut().music().fade_in(-1, 1000)?;
+                                themes.theme().music().fade_in(-1, 1000)?;
                             }
                             MatchState::Paused => {
                                 // switch music but pause it immediately
-                                themes.theme_mut().music().play(-1)?;
+                                themes.theme().music().play(-1)?;
                                 sdl2::mixer::Music::pause();
                             }
                             _ => {}
@@ -389,27 +528,23 @@ impl TetrisSdl {
                         dropped_rows,
                     } => {
                         let theme = themes.current();
-                        let mino_rects = theme.mino_rects(*player_id, *minos);
-                        let dropped_pixels = theme.rows_to_pixels(*dropped_rows);
+                        let mino_rects = theme.mino_rects(player_id, minos);
+                        let dropped_pixels = theme.rows_to_pixels(dropped_rows);
                         let hard_drop_animation = HardDropAnimation::new(
                             &self.canvas,
-                            &self.texture_creator,
+                            &texture_creator,
                             mino_rects,
                             dropped_pixels,
                         )?;
-                        player_hard_drop_animations.insert(*player_id, hard_drop_animation);
-                    }
-                    GameEvent::HighScoreEntry if high_score_entry.is_some() => {
-                        match high_score_entry.unwrap().to_high_score() {
-                            None => {}
-                            Some(high_score) => fixture.save_high_score(high_score)?,
-                        }
-                        break 'game;
+                        player_hard_drop_animations.insert(player_id, hard_drop_animation);
                     }
                     _ => {}
                 }
 
-                themes.theme_mut().receive_event(*event)?;
+                themes.theme().play_sound_effects(event)?;
+                if let Some(emit) = themes.theme().emit_particles(event) {
+                    to_emit_particles.push(emit);
+                }
             }
 
             match fixture.state() {
@@ -425,36 +560,37 @@ impl TetrisSdl {
                             _ => {}
                         }
                     }
-                    match maybe_high_score {
-                        Some(high_score) if game_over_done => {
-                            // start high score entry
-                            fixture.set_high_score_entry();
-                            high_score_entry = Some(HighScoreEntry::new(
-                                high_score,
-                                &self.texture_creator,
-                                themes.theme(),
-                                themes.scale(),
-                            )?);
+                    if let Some(high_score) = maybe_high_score {
+                        // start high score entry
+                        if game_over_done {
+                            return Ok(Some(high_score))
                         }
-                        _ => {}
                     }
                 }
                 MatchState::Normal if !themes.is_fading() => {
                     let mut garbage: Vec<(u32, u32)> = vec![];
                     let mut new_game_over: Option<u32> = None;
+                    let mut next_theme = false;
                     for player in fixture.players.iter_mut() {
+                        if let Some(emit) = player.current_particles() {
+                            to_emit_particles.push(emit);
+                        }
+
                         if player.update_destroy_animation(delta) {
                             continue;
                         }
                         if player_hard_drop_animations.contains_key(&player.player) {
                             continue;
                         }
+
                         let event = player.game.update(delta);
                         if event.is_none() {
                             continue;
                         }
-                        match event.unwrap() {
-                            GameEvent::GameOver(_) => {
+
+                        let event = event.unwrap();
+                        match event {
+                            GameEvent::GameOver { .. } => {
                                 new_game_over = Some(player.player);
                             }
                             GameEvent::Destroy(lines) => {
@@ -470,14 +606,12 @@ impl TetrisSdl {
                                 send_garbage_lines,
                                 ..
                             } => {
-                                if level_up {
+                                // if playing with all themes then the theme is auto switched after each level
+                                if game_config.themes == MatchThemes::All && level_up {
                                     let level = player.game.level();
                                     if level > max_level {
-                                        // todo option to disable this in config
+                                        next_theme = true;
                                         max_level = level;
-                                        themes.start_fade(&mut self.canvas)?;
-                                        themes.next();
-                                        themes.theme_mut().music().fade_in(-1, 1000)?;
                                     }
                                 }
 
@@ -487,35 +621,75 @@ impl TetrisSdl {
                             }
                             _ => {}
                         }
-                        themes.theme_mut().receive_event(event.unwrap())?;
+                        themes.theme().play_sound_effects(event)?;
+                        if let Some(emit) = themes.theme().emit_particles(event) {
+                            to_emit_particles.push(emit);
+                        }
                     }
 
                     // maybe start game over
                     if let Some(winner) = fixture.check_for_winning_player() {
                         sdl2::mixer::Music::halt();
                         fixture.set_winner(winner, themes.theme().game_over_animation_type());
-                        themes.theme_mut().receive_event(GameEvent::Victory)?;
+                        let victory = GameEvent::Victory { player: winner };
+                        themes.theme().play_sound_effects(victory)?;
+                        if let Some(emit) = themes.theme().emit_particles(victory) {
+                            to_emit_particles.push(emit);
+                        }
                     } else if new_game_over.is_some() {
                         if let Some(loser) = new_game_over {
                             sdl2::mixer::Music::halt();
                             fixture.set_game_over(loser, themes.theme().game_over_animation_type());
-                        } else {
-                            unreachable!();
+                            let winners = fixture.players.iter()
+                                .map(|p| p.player)
+                                .filter(|p| *p != loser);
+                            for winner in winners {
+                                let victory = GameEvent::Victory { player: winner };
+                                if let Some(emit) = themes.theme().emit_particles(victory) {
+                                    to_emit_particles.push(emit);
+                                }
+                            }
                         }
                     } else {
                         // maybe send garbage
                         for (from_player, send_garbage_lines) in garbage {
                             fixture.send_garbage(from_player, send_garbage_lines);
                         }
+
+                        // maybe change the theme
+                        if next_theme {
+                            themes.start_fade(&mut self.canvas)?;
+                            themes.next();
+                            themes.theme().music().fade_in(-1, 1000)?;
+                        }
                     }
                 }
                 _ => {}
             }
 
-            // draw the game
+            // update particles
+            if !fixture.state().is_paused() {
+                fg_particles.update(delta);
+
+                if themes.render_bg_particles() {
+                    bg_particles.update(delta);
+                }
+            }
+            for emit in to_emit_particles.into_iter() {
+                fg_particles.add_source(emit.into_source(&themes, &self.particle_scale));
+            }
+
+            // clear
             self.canvas
                 .set_draw_color(themes.theme().background_color());
             self.canvas.clear();
+
+            // draw bg particles
+            if themes.render_bg_particles() {
+                bg_particles.draw(&mut self.canvas)?;
+            }
+
+            // draw the game
             self.canvas
                 .with_multiple_texture_canvas(
                     texture_refs.iter(),
@@ -525,7 +699,7 @@ impl TetrisSdl {
                         {
                             let player = fixture.player(*player_id);
                             themes
-                                .theme_mut()
+                                .theme()
                                 .draw_background(texture_canvas, &player.game)
                                 .unwrap();
                         }
@@ -534,7 +708,7 @@ impl TetrisSdl {
                         {
                             let player = fixture.player(*player_id);
                             themes
-                                .theme_mut()
+                                .theme()
                                 .draw_board(
                                     texture_canvas,
                                     &player.game,
@@ -555,6 +729,10 @@ impl TetrisSdl {
                 .collect();
             themes.draw_current(&mut self.canvas, &mut texture_refs, delta, offsets)?;
 
+
+            // fg particles
+            fg_particles.draw(&mut self.canvas)?;
+
             let mut remove_hard_drop_animations: Vec<u32> = vec![];
             for (player_id, animation) in player_hard_drop_animations.iter_mut() {
                 if !animation.update(&mut self.canvas, delta)? {
@@ -563,38 +741,58 @@ impl TetrisSdl {
             }
             for player_id in remove_hard_drop_animations {
                 player_hard_drop_animations.remove(&player_id);
-                fixture.player_mut(player_id).impact()
+                fixture.player_mut(player_id).impact();
             }
 
             if fixture.state().is_paused() {
-                themes.draw_paused(&mut self.canvas)?;
-            }
-
-            match high_score_entry.as_mut() {
-                None => {}
-                Some(entry) => {
-                    themes.draw_hide_game(&mut self.canvas)?;
-                    entry.draw(&mut self.canvas, themes.theme())?;
-                }
+                paused_screen.draw(&mut self.canvas)?;
             }
 
             self.canvas.present();
         }
 
-        Ok(())
+        Ok(None)
     }
 }
 
 fn main() -> Result<(), String> {
     let mut last_game_config: Option<GameConfig> = None;
     let mut tetris = TetrisSdl::new()?;
+    let texture_creator = tetris.canvas.texture_creator();
+    let (_, window_height) = tetris.canvas.window().size();
+    let all_themes = AllThemes::new(
+        &mut tetris.canvas,
+        &texture_creator,
+        &tetris.ttf,
+        tetris.config,
+        window_height
+    )?;
+    let mut fg_particles = ParticleRender::new(
+        &mut tetris.canvas,
+        Particles::new(MAX_PARTICLES_PER_PLAYER * MAX_PLAYERS as usize),
+        &texture_creator,
+        tetris.particle_scale,
+        vec![]
+    )?;
+
+    let mut bg_particles = ParticleRender::new(
+        &mut tetris.canvas,
+        Particles::new(MAX_BACKGROUND_PARTICLES),
+        &texture_creator,
+        tetris.particle_scale,
+        all_themes.all()
+    )?;
+
     loop {
-        match tetris.main_menu(last_game_config)? {
+        match tetris.main_menu(last_game_config, &mut bg_particles)? {
             Some(MainMenuAction::NewMatch { config }) => {
                 last_game_config = Some(config);
-                tetris.game(config)?;
+                let maybe_high_score = tetris.game(config, &all_themes, &mut bg_particles, &mut fg_particles)?;
+                if let Some(high_score) = maybe_high_score {
+                    tetris.new_high_score(high_score, &mut bg_particles)?;
+                }
             },
-            Some(MainMenuAction::ViewHighScores) => tetris.view_high_score()?,
+            Some(MainMenuAction::ViewHighScores) => tetris.view_high_score(&mut bg_particles)?,
             _ => {
                 break;
             }

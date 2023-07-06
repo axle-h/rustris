@@ -7,12 +7,13 @@ use crate::event::GameEvent;
 use crate::game::board::{compact_destroy_lines, DestroyLines};
 use crate::game::random::RandomTetromino;
 use crate::game::{Game, GameMetrics};
-use crate::high_score::table::{HighScore, HighScoreTable};
+use crate::high_score::table::HighScoreTable;
 use crate::high_score::NewHighScore;
 
 use rand::Rng;
 
 use std::time::Duration;
+use crate::particles::prescribed::{PlayerParticleTarget, PlayerTargetedParticles};
 
 pub struct Player {
     pub player: u32,
@@ -74,13 +75,26 @@ impl Player {
         match &self.destroy_animation {
             None => vec![],
             Some(animation) => match animation.current() {
-                None => vec![],
-                Some(animate) => compact_destroy_lines(animation.lines())
+                Some(animate) if !animate.is_emit_particles() => compact_destroy_lines(animation.lines())
                     .into_iter()
                     .map(|y| (y, animate))
                     .collect(),
+                _ => vec![],
             },
         }
+    }
+
+    pub fn current_particles(&self) -> Option<PlayerTargetedParticles> {
+        self.destroy_animation.as_ref()
+            .map(|animation| animation.current().map(|animate| (animate, animation.lines())))
+            .flatten()
+            .map(|(animate, lines)| if let TextureAnimate::EmitParticles(particles) = animate {
+                let target = PlayerParticleTarget::DestroyedLines(lines);
+                Some(particles.into_targeted(self.player, target))
+            } else {
+                None
+            })
+            .flatten()
     }
 }
 
@@ -88,8 +102,7 @@ impl Player {
 pub enum MatchState {
     Normal,
     Paused,
-    GameOver { high_score: Option<NewHighScore> },
-    HighScoreEntry,
+    GameOver { high_score: Option<NewHighScore> }
 }
 
 impl MatchState {
@@ -210,10 +223,6 @@ impl Match {
             .animate_game_over(animation_type);
     }
 
-    pub fn set_high_score_entry(&mut self) {
-        self.state = MatchState::HighScoreEntry;
-    }
-
     pub fn mut_game<F>(&mut self, player: u32, mut f: F) -> Option<GameEvent>
     where
         F: FnMut(&mut Game) -> Option<GameEvent>,
@@ -262,11 +271,6 @@ impl Match {
             .unwrap()
             .game
             .send_garbage(garbage_lines);
-    }
-
-    pub fn save_high_score(&mut self, high_score: HighScore) -> Result<(), String> {
-        self.high_scores.add_high_score(high_score);
-        self.high_scores.save()
     }
 
     fn highest_score(&self) -> GameMetrics {

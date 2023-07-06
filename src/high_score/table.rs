@@ -73,7 +73,7 @@ impl HighScoreTable {
         }
     }
 
-    fn try_get_score_index(&self, new_score: u32) -> Option<usize> {
+    pub fn try_get_score_index(&self, new_score: u32) -> Option<usize> {
         match self
             .scores
             .iter()

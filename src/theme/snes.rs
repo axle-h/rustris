@@ -1,24 +1,21 @@
 use crate::animation::destroy::DestroyAnimationType;
 use crate::animation::game_over::GameOverAnimationType;
 use crate::config::Config;
-use crate::theme::block_theme::{BlockTheme, BlockThemeOptions, TetrominoSnips, VISIBLE_BUFFER};
+use crate::theme::block_theme::{BlockTheme, BlockThemeOptions};
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
 use sdl2::render::{TextureCreator, WindowCanvas};
 use sdl2::video::WindowContext;
+use crate::theme::geometry::VISIBLE_BUFFER;
+use crate::theme::sprite_sheet::TetrominoSpriteSheetMeta;
 
 const ALPHA_WIDTH: u32 = 7;
 const ALPHA_HEIGHT: u32 = 8;
 const BLOCK_PIXELS: u32 = 8;
 const BUFFER_PIXELS: u32 = VISIBLE_BUFFER * BLOCK_PIXELS;
 
-fn block_snip(i: i32, j: i32) -> Rect {
-    Rect::new(
-        i * BLOCK_PIXELS as i32,
-        j * BLOCK_PIXELS as i32,
-        BLOCK_PIXELS,
-        BLOCK_PIXELS,
-    )
+fn mino(i: i32, j: i32) -> Point {
+    Point::new(i * BLOCK_PIXELS as i32, j * BLOCK_PIXELS as i32)
 }
 
 fn char_snip(row: i32, col: i32) -> Rect {
@@ -33,12 +30,44 @@ pub fn snes_theme<'a>(
     let options = BlockThemeOptions::new(
         "snes".to_string(),
         config,
+        TetrominoSpriteSheetMeta::new(
+            "resource/snes/sprites.png",
+            BLOCK_PIXELS,
+            (
+                mino(1, 1),
+                mino(1, 0),
+            ),
+            (
+                mino(3, 1),
+                mino(3, 0),
+            ),
+            (
+                mino(2, 1),
+                mino(2, 0),
+            ),
+            (
+                mino(0, 1),
+                mino(0, 0),
+            ),
+            (
+                mino(2, 1),
+                mino(2, 0),
+            ),
+            (
+                mino(0, 1),
+                mino(0, 0),
+            ),
+            (
+                mino(3, 1),
+                mino(3, 0),
+            ),
+            mino(0, 0),
+            0x50
+        ),
         "sprites.png".to_string(),
         "background.png".to_string(),
         "board.png".to_string(),
         "game-over.png".to_string(),
-        0x40,
-        BLOCK_PIXELS,
         (ALPHA_WIDTH, ALPHA_HEIGHT),
         (0..10)
             .map(|i| char_snip(0, i))
@@ -89,42 +118,6 @@ pub fn snes_theme<'a>(
         true,
         Point::new(62, 0),
         Point::new(8, 0),
-        TetrominoSnips::uniform_stack(
-            Rect::new(143, 26, BLOCK_PIXELS * 4, BLOCK_PIXELS),
-            block_snip(1, 1),
-            block_snip(1, 0),
-        ),
-        TetrominoSnips::uniform_stack(
-            Rect::new(118, 18, BLOCK_PIXELS * 3, BLOCK_PIXELS * 2),
-            block_snip(3, 1),
-            block_snip(3, 0),
-        ),
-        TetrominoSnips::uniform_stack(
-            Rect::new(93, 18, BLOCK_PIXELS * 3, BLOCK_PIXELS * 2),
-            block_snip(2, 1),
-            block_snip(2, 0),
-        ),
-        TetrominoSnips::uniform_stack(
-            Rect::new(1, 18, BLOCK_PIXELS * 2, BLOCK_PIXELS * 2),
-            block_snip(0, 1),
-            block_snip(0, 0),
-        ),
-        TetrominoSnips::uniform_stack(
-            Rect::new(43, 18, BLOCK_PIXELS * 3, BLOCK_PIXELS * 2),
-            block_snip(2, 1),
-            block_snip(2, 0),
-        ),
-        TetrominoSnips::uniform_stack(
-            Rect::new(68, 18, BLOCK_PIXELS * 3, BLOCK_PIXELS * 2),
-            block_snip(0, 1),
-            block_snip(0, 0),
-        ),
-        TetrominoSnips::uniform_stack(
-            Rect::new(18, 18, BLOCK_PIXELS * 3, BLOCK_PIXELS * 2),
-            block_snip(3, 1),
-            block_snip(3, 0),
-        ),
-        block_snip(0, 0),
         Color::RGB(0x74, 0x74, 0x74),
         DestroyAnimationType::Sweep,
         GameOverAnimationType::CurtainDown,

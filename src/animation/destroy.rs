@@ -3,6 +3,7 @@ use crate::animation::TextureAnimate;
 use crate::game::board::DestroyLines;
 
 use std::time::Duration;
+use sdl2::pixels::Color;
 use crate::particles::prescribed::PrescribedParticles;
 
 const MAX_FLASHES: u32 = 3;
@@ -14,7 +15,7 @@ const PARTICLE_FADE_IN_DURATION: Duration = Duration::from_millis(750);
 pub enum DestroyAnimationType {
     Flash,
     Sweep,
-    Particles
+    Particles { color: Color }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -41,7 +42,7 @@ fn first_state(destroy_type: DestroyAnimationType) -> State {
             Duration::ZERO,
             TextureAnimate::FillAlphaRectangle { width: 0.0 },
         ),
-        DestroyAnimationType::Particles => State::Nothing(Duration::ZERO)
+        DestroyAnimationType::Particles { .. } => State::Nothing(Duration::ZERO)
     }
 }
 
@@ -90,11 +91,11 @@ impl DestroyAnimation {
         }
     }
 
-    fn next_particles(&mut self) -> State {
+    fn next_particles(&mut self, color: Color) -> State {
         match self.state {
             State::Nothing(_) if self.count == 0 => {
                 self.count += 1;
-                let particles = PrescribedParticles::FadeInLatticeBurstAndFall { fade_in: PARTICLE_FADE_IN_DURATION };
+                let particles = PrescribedParticles::FadeInLatticeBurstAndFall { fade_in: PARTICLE_FADE_IN_DURATION, color };
                 State::Animate(Duration::ZERO, TextureAnimate::EmitParticles(particles))
             },
             State::Animate(_, _) => State::Nothing(Duration::ZERO),
@@ -107,7 +108,7 @@ impl DestroyAnimation {
         match self.destroy_type {
             DestroyAnimationType::Flash => self.next_flash(duration),
             DestroyAnimationType::Sweep => self.next_sweep(duration),
-            DestroyAnimationType::Particles => self.next_particles(),
+            DestroyAnimationType::Particles { color } => self.next_particles(color),
         }
     }
 }

@@ -1,3 +1,4 @@
+use crate::particles::color::ParticleColor;
 use crate::particles::geometry::PointF;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -34,6 +35,12 @@ impl From<PointF> for VariableQuantity<PointF> {
     }
 }
 
+impl From<ParticleColor> for VariableQuantity<ParticleColor> {
+    fn from(quantity: ParticleColor) -> Self {
+        VariableQuantity::new(quantity, ParticleColor::ZERO)
+    }
+}
+
 impl VariableQuantity<f64> {
     pub fn next(&self) -> f64 {
         self.quantity + self.variance * rand_signed_f64()
@@ -43,5 +50,11 @@ impl VariableQuantity<f64> {
 impl VariableQuantity<PointF> {
     pub fn next(&self) -> PointF {
         self.quantity + self.variance * PointF::new(rand_signed_f64(), rand_signed_f64())
+    }
+}
+
+impl VariableQuantity<ParticleColor> {
+    pub fn next(&self) -> ParticleColor {
+        self.quantity + self.variance * ParticleColor::new(rand::random(), rand::random(), rand::random())
     }
 }

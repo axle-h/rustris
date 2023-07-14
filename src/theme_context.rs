@@ -9,9 +9,11 @@ use sdl2::rect::Rect;
 use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::video::WindowContext;
 use std::time::Duration;
+use sdl2::ttf::Sdl2TtfContext;
+use crate::theme::vector::VectorTheme;
 
 const THEME_FADE_DURATION: Duration = Duration::from_millis(1000);
-const THEMES: usize = 3;
+const THEMES: usize = 4;
 
 pub struct PlayerTextures<'a> {
     pub background: Texture<'a>,
@@ -95,7 +97,7 @@ impl<'a> ScaledTheme<'a> {
     }
 
     pub fn mino_rects(&self, player_id: u32, minos: Minos) -> [Rect; 4] {
-        let rects = self.theme.mino_rects(minos);
+        let rects = self.theme.geometry().mino_rects(minos);
         let player_board = &self.player_themes[player_id as usize - 1].board_snip;
         rects.map(|rect| {
             self.scale
@@ -104,7 +106,7 @@ impl<'a> ScaledTheme<'a> {
     }
 
     pub fn rows_to_pixels(&self, value: u32) -> u32 {
-        let raw_pixels = self.theme.block_size() * value;
+        let raw_pixels = self.theme.geometry().block_size() * value;
         self.scale.scale_length(raw_pixels)
     }
 }
@@ -120,10 +122,12 @@ impl<'a> ThemeContext<'a> {
     pub fn new(
         canvas: &mut WindowCanvas,
         texture_creator: &'a TextureCreator<WindowContext>,
+        ttf: &'a Sdl2TtfContext,
         players: u32,
         window_size: (u32, u32),
         config: Config,
     ) -> Result<Self, String> {
+        let (window_width, window_height) = window_size;
         let game_boy = config
             .theme
             .game_boy_palette
@@ -131,17 +135,19 @@ impl<'a> ThemeContext<'a> {
         //let game_boy_green = GameBoyPalette::GreenSoup.theme(canvas, texture_creator, config)?;
         let nes = nes_theme(canvas, texture_creator, config)?;
         let snes = snes_theme(canvas, texture_creator, config)?;
+        let vector = VectorTheme::new(canvas, texture_creator, ttf, window_height)?;
 
-        let (window_width, window_height) = window_size;
         let mut fade_buffer = texture_creator
             .create_texture_target(None, window_width, window_height)
             .map_err(|e| e.to_string())?;
         fade_buffer.set_blend_mode(BlendMode::Blend);
 
+
+        let themes: [Box<dyn Theme>; THEMES] = [Box::new(vector), Box::new(game_boy), Box::new(nes), Box::new(snes)];
         Ok(Self {
             current: 0,
-            themes: [game_boy, nes, snes]
-                .map(|theme| ScaledTheme::new(Box::new(theme), players, window_size)),
+            themes: themes
+                .map(|theme| ScaledTheme::new(theme, players, window_size)),
             fade_buffer,
             fade_duration: None,
         })
@@ -180,7 +186,7 @@ impl<'a> ThemeContext<'a> {
         let theme = &self.themes[self.current];
         let player = theme.player_themes.get(player as usize - 1).unwrap();
         theme.scale.scale_and_offset_rect(
-            theme.theme.line_snip(j),
+            theme.theme.geometry().line_snip(j),
             player.board_snip.x(),
             player.board_snip.y()
         )

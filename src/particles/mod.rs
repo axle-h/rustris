@@ -1,6 +1,7 @@
 use std::cmp::min;
 use std::rc::Rc;
 use std::time::Duration;
+use crate::particles::color::ParticleColor;
 use crate::particles::geometry::PointF;
 use crate::particles::quantity::VariableQuantity;
 use crate::particles::source::{ParticleSource, ParticlePositionSource};
@@ -11,13 +12,15 @@ pub mod render;
 pub mod scale;
 pub mod quantity;
 pub mod prescribed;
+pub mod color;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Particle {
     position: PointF,
     velocity: PointF,
     acceleration: PointF,
-    alpha_mod: f64,
+    alpha: f64,
+    color: ParticleColor
 }
 
 impl Particle {
@@ -26,7 +29,8 @@ impl Particle {
             position,
             velocity: source.velocity().next(),
             acceleration: source.acceleration().next(),
-            alpha_mod: if source.fade_in().is_some() { 0.0 } else { 1.0 }
+            alpha: if source.fade_in().is_some() { 0.0 } else { 1.0 },
+            color: source.color().next()
         }
     }
 
@@ -143,13 +147,13 @@ impl Particles {
                 }
             }
 
-            // alpha_mod
+            // alpha
             if let Some(fade_in) = group.fade_in {
                 if group.lifetime >= fade_in {
                     group.fade_in = None;
                 } else {
                     for particle in group.particles.iter_mut() {
-                        particle.alpha_mod = 1.0_f64.min(group.lifetime / fade_in);
+                        particle.alpha = 1.0_f64.min(group.lifetime / fade_in);
                     }
                 }
             }

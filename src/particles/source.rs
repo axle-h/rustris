@@ -1,5 +1,6 @@
 use std::cmp::min;
 use std::time::Duration;
+use crate::particles::color::ParticleColor;
 use crate::particles::geometry::{PointF, RectF};
 use crate::particles::quantity::VariableQuantity;
 
@@ -42,7 +43,8 @@ pub struct ParticleSource {
     fade_in: Option<Duration>,
     lifetime_secs: Option<VariableQuantity<f64>>,
     velocity: VariableQuantity<PointF>,
-    acceleration: VariableQuantity<PointF>
+    acceleration: VariableQuantity<PointF>,
+    color: VariableQuantity<ParticleColor>
 }
 
 impl ParticleSource {
@@ -54,8 +56,15 @@ impl ParticleSource {
             fade_in: None,
             lifetime_secs: None,
             velocity: VariableQuantity::new(PointF::ZERO, PointF::ZERO),
-            acceleration: VariableQuantity::new(PointF::ZERO, PointF::ZERO)
+            acceleration: VariableQuantity::new(PointF::ZERO, PointF::ZERO),
+            color: VariableQuantity::new(ParticleColor::WHITE, ParticleColor::WHITE),
         }
+    }
+
+    pub fn with_color<C : Into<VariableQuantity<ParticleColor>>>(&self, value: C) -> Self {
+        let mut result = self.clone();
+        result.color = value.into();
+        result
     }
 
     pub fn with_anchor(&self, value: Duration) -> Self {
@@ -155,12 +164,16 @@ impl ParticleSource {
         &self.lifetime_secs
     }
 
-
     pub fn velocity(&self) -> &VariableQuantity<PointF> {
         &self.velocity
     }
+
     pub fn acceleration(&self) -> &VariableQuantity<PointF> {
         &self.acceleration
+    }
+
+    pub fn color(&self) -> &VariableQuantity<ParticleColor> {
+        &self.color
     }
 }
 

@@ -1,21 +1,19 @@
 use crate::animation::destroy::DestroyAnimationType;
 use crate::animation::game_over::GameOverAnimationType;
 use crate::config::Config;
-use crate::theme::block_theme::{BlockTheme, BlockThemeOptions, TetrominoSnips, VISIBLE_BUFFER};
+use crate::theme::block_theme::{BlockTheme, BlockThemeOptions};
 use serde::{Deserialize, Serialize};
 
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
 use sdl2::render::{TextureCreator, WindowCanvas};
 use sdl2::video::WindowContext;
+use crate::theme::geometry::VISIBLE_BUFFER;
+use crate::theme::sprite_sheet::TetrominoSpriteSheetMeta;
 
 const ALPHA_PIXELS: u32 = 6;
 const BLOCK_PIXELS: u32 = 8;
 const BUFFER_PIXELS: u32 = VISIBLE_BUFFER * BLOCK_PIXELS;
-
-fn block_snip(x: i32, y: i32) -> Rect {
-    Rect::new(x, y, BLOCK_PIXELS, BLOCK_PIXELS)
-}
 
 fn char_snip(row: i32, col: i32) -> Rect {
     // characters are in row x col with 8 pixels between columns and 7 pixels between rows
@@ -32,12 +30,23 @@ fn game_boy_theme_options(palette: &GameBoyPalette, config: Config) -> BlockThem
     BlockThemeOptions::new(
         "gb".to_string(),
         config,
+        TetrominoSpriteSheetMeta::new(
+            &format!("resource/gb/{}", palette.sprite_sheet_file()),
+            BLOCK_PIXELS,
+            [Point::new(1, 35), Point::new(9, 35), Point::new(17, 35), Point::new(25, 35)],
+            Point::new(51, 26),
+            Point::new(26, 26),
+            Point::new(1, 1),
+            Point::new(51, 1),
+            Point::new(1, 26),
+            Point::new(18, 1),
+            (34, 35),
+            0x30
+        ),
         palette.sprite_sheet_file(),
         palette.background_file(),
         palette.board_file(),
         palette.game_over_file(),
-        0x30,
-        BLOCK_PIXELS,
         (ALPHA_PIXELS, ALPHA_PIXELS),
         [
             char_snip(3, 0),
@@ -71,40 +80,6 @@ fn game_boy_theme_options(palette: &GameBoyPalette, config: Config) -> BlockThem
         false,
         Point::new(55, 0),
         Point::new(8, 0),
-        TetrominoSnips::asymmetrical(
-            Rect::new(1, 35, BLOCK_PIXELS * 4, BLOCK_PIXELS),
-            [
-                block_snip(1, 35),
-                block_snip(9, 35),
-                block_snip(17, 35),
-                block_snip(25, 35),
-            ],
-        ),
-        TetrominoSnips::uniform(
-            Rect::new(51, 18, BLOCK_PIXELS * 3, BLOCK_PIXELS * 2),
-            block_snip(51, 26),
-        ),
-        TetrominoSnips::uniform(
-            Rect::new(26, 18, BLOCK_PIXELS * 3, BLOCK_PIXELS * 2),
-            block_snip(26, 26),
-        ),
-        TetrominoSnips::uniform(
-            Rect::new(1, 1, BLOCK_PIXELS * 2, BLOCK_PIXELS * 2),
-            block_snip(1, 1),
-        ),
-        TetrominoSnips::uniform(
-            Rect::new(43, 1, BLOCK_PIXELS * 3, BLOCK_PIXELS * 2),
-            block_snip(51, 1),
-        ),
-        TetrominoSnips::uniform(
-            Rect::new(1, 18, BLOCK_PIXELS * 3, BLOCK_PIXELS * 2),
-            block_snip(1, 26),
-        ),
-        TetrominoSnips::uniform(
-            Rect::new(18, 1, BLOCK_PIXELS * 3, BLOCK_PIXELS * 2),
-            block_snip(18, 1),
-        ),
-        block_snip(34, 35),
         palette.white(),
         DestroyAnimationType::Flash,
         GameOverAnimationType::CurtainUp,

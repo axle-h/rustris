@@ -340,6 +340,7 @@ impl TetrisSdl {
         let mut themes = ThemeContext::new(
             &mut self.canvas,
             &self.texture_creator,
+            &self.ttf,
             game_config.players,
             window_size,
             self.config,

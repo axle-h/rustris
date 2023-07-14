@@ -1,23 +1,20 @@
 use crate::animation::destroy::DestroyAnimationType;
 use crate::animation::game_over::GameOverAnimationType;
 use crate::config::Config;
-use crate::theme::block_theme::{BlockTheme, BlockThemeOptions, TetrominoSnips, VISIBLE_BUFFER};
+use crate::theme::block_theme::{BlockTheme, BlockThemeOptions};
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
 use sdl2::render::{TextureCreator, WindowCanvas};
 use sdl2::video::WindowContext;
+use crate::theme::geometry::VISIBLE_BUFFER;
+use crate::theme::sprite_sheet::TetrominoSpriteSheetMeta;
 
 const ALPHA_PIXELS: u32 = 7;
 const BLOCK_PIXELS: u32 = 8;
 const BUFFER_PIXELS: u32 = VISIBLE_BUFFER * BLOCK_PIXELS;
 
-fn block_snip(i: i32, j: i32) -> Rect {
-    Rect::new(
-        i * BLOCK_PIXELS as i32,
-        j * BLOCK_PIXELS as i32,
-        BLOCK_PIXELS,
-        BLOCK_PIXELS,
-    )
+fn mino(i: i32, j: i32) -> Point {
+    Point::new(i * BLOCK_PIXELS as i32, j * BLOCK_PIXELS as i32,)
 }
 
 fn char_snip(row: i32, col: i32) -> Rect {
@@ -32,12 +29,23 @@ pub fn nes_theme<'a>(
     let options = BlockThemeOptions::new(
         "nes".to_string(),
         config,
+        TetrominoSpriteSheetMeta::new(
+            "resource/nes/sprites.png",
+            BLOCK_PIXELS,
+            mino(0, 0),
+            mino(2, 0),
+            mino(1, 0),
+            mino(0, 0),
+            mino(2, 0),
+            mino(0, 0),
+            mino(1, 0),
+            mino(0, 0),
+            0x50
+        ),
         "sprites.png".to_string(),
         "background.png".to_string(),
         "board.png".to_string(),
         "game-over.png".to_string(),
-        0x50,
-        BLOCK_PIXELS,
         (ALPHA_PIXELS, ALPHA_PIXELS),
         (0..10)
             .map(|i| char_snip(0, i))
@@ -88,35 +96,6 @@ pub fn nes_theme<'a>(
         true,
         Point::new(66, 0),
         Point::new(7, 0),
-        TetrominoSnips::uniform(
-            Rect::new(36, 102, BLOCK_PIXELS * 4, BLOCK_PIXELS),
-            block_snip(0, 0),
-        ),
-        TetrominoSnips::uniform(
-            Rect::new(44, 17, BLOCK_PIXELS * 3, BLOCK_PIXELS * 2),
-            block_snip(2, 0),
-        ),
-        TetrominoSnips::uniform(
-            Rect::new(44, 85, BLOCK_PIXELS * 3, BLOCK_PIXELS * 2),
-            block_snip(1, 0),
-        ),
-        TetrominoSnips::uniform(
-            Rect::new(52, 51, BLOCK_PIXELS * 2, BLOCK_PIXELS * 2),
-            block_snip(0, 0),
-        ),
-        TetrominoSnips::uniform(
-            Rect::new(44, 68, BLOCK_PIXELS * 3, BLOCK_PIXELS * 2),
-            block_snip(2, 0),
-        ),
-        TetrominoSnips::uniform(
-            Rect::new(44, 0, BLOCK_PIXELS * 3, BLOCK_PIXELS * 2),
-            block_snip(0, 0),
-        ),
-        TetrominoSnips::uniform(
-            Rect::new(44, 34, BLOCK_PIXELS * 3, BLOCK_PIXELS * 2),
-            block_snip(1, 0),
-        ),
-        block_snip(0, 0),
         Color::RGB(0x74, 0x74, 0x74),
         DestroyAnimationType::Sweep,
         GameOverAnimationType::CurtainDown,

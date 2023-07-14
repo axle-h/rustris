@@ -9,16 +9,19 @@ use sdl2::mixer::Music;
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
 use sdl2::render::{Texture, WindowCanvas};
+use crate::theme::geometry::BoardGeometry;
 
 mod block_theme;
 pub mod game_boy;
 pub mod nes;
 pub mod snes;
 pub mod sound;
-pub mod perimeter;
+pub mod sprite_sheet;
+pub mod vector;
+pub mod geometry;
 
 pub trait Theme {
-    fn block_size(&self) -> u32;
+    fn geometry(&self) -> &BoardGeometry;
     fn background_color(&self) -> Color;
     fn background_size(&self) -> (u32, u32);
     fn board_snip(&self) -> Rect;
@@ -31,14 +34,10 @@ pub trait Theme {
         animate_game_over: Option<GameOverAnimate>,
     ) -> Result<(), String>;
 
-    /// get the rect of the line within the board_snip
-    fn line_snip(&self, j: u32) -> Rect;
-
     fn destroy_animation_type(&self) -> DestroyAnimationType;
     fn game_over_animation_type(&self) -> GameOverAnimationType;
     fn music(&self) -> &Music;
     fn receive_event(&mut self, event: GameEvent) -> Result<(), String>;
-    fn mino_rects(&self, minos: Minos) -> [Rect; 4];
 }
 
 // const REFERENCE_I: Color = Color::CYAN;

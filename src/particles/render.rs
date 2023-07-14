@@ -35,7 +35,7 @@ impl<'a> ParticleRender<'a> {
         let (sphere_width, sphere_height) = self.sphere_size;
         let sphere_width= sphere_width / 2;
         let sphere_height= sphere_height / 2;
-        self.sphere_texture.set_color_mod(1, 1, 1);
+
         for particle in self.particles.particles() {
             let point = self.scale.point_to_render_space(particle.position);
             let rect = Rect::new(
@@ -44,8 +44,10 @@ impl<'a> ParticleRender<'a> {
                 sphere_width,
                 sphere_height
             );
-            if particle.alpha_mod < 1.0 {
-                self.sphere_texture.set_alpha_mod((255.0 * particle.alpha_mod).round() as u8);
+            let (r, g, b): (u8, u8, u8) = particle.color.into();
+            self.sphere_texture.set_color_mod(r, g, b);
+            if particle.alpha < 1.0 {
+                self.sphere_texture.set_alpha_mod((255.0 * particle.alpha).round() as u8);
             } else {
                 self.sphere_texture.set_alpha_mod(255);
             }

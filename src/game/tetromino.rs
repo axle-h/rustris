@@ -227,8 +227,12 @@ impl TetrominoMeta {
             .unwrap()
     }
 
-    pub fn bounding_box(&self) -> u32 {
-        self.bounding_box
+    pub fn normal_minos(&self) -> Minos {
+        let normal_offset = Point::new(
+            self.minos.iter().map(|p| p.x).min().unwrap(),
+            self.minos.iter().map(|p| p.y).min().unwrap()
+        );
+        return self.minos.map(|p| p - normal_offset)
     }
 
     pub fn minos(&self) -> Minos {
@@ -586,5 +590,15 @@ mod tests {
         tetromino.register_lock_placement();
         tetromino.translate(1, 0);
         assert_eq!(tetromino.lock_placements(), 1);
+    }
+
+    #[test]
+    fn normal_minos() {
+        assert_eq!(TetrominoShape::I.meta().normal_minos(), [
+            Point::new(0, 0),
+            Point::new(1, 0),
+            Point::new(2, 0),
+            Point::new(3, 0),
+        ]);
     }
 }

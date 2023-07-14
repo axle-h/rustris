@@ -18,67 +18,8 @@ use sdl2::rect::{Point, Rect};
 use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::video::WindowContext;
 use std::cmp::min;
-use crate::theme::perimeter::PerimeterRender;
-
-pub const VISIBLE_BUFFER: u32 = 2;
-pub const VISIBLE_BOARD_HEIGHT: u32 = BOARD_HEIGHT + VISIBLE_BUFFER;
-
-pub struct TetrominoSnips {
-    pub snip: Rect,
-    is_uniform: bool,
-    mino_blocks: [Rect; 4],
-    stack_blocks: [Rect; 4],
-}
-
-impl TetrominoSnips {
-    pub fn uniform(snip: Rect, mino_block: Rect) -> Self {
-        Self {
-            snip,
-            is_uniform: true,
-            mino_blocks: [mino_block; 4],
-            stack_blocks: [mino_block; 4],
-        }
-    }
-
-    pub fn uniform_stack(snip: Rect, mino_block: Rect, stack_block: Rect) -> Self {
-        Self {
-            snip,
-            is_uniform: true,
-            mino_blocks: [mino_block; 4],
-            stack_blocks: [stack_block; 4],
-        }
-    }
-
-    pub fn asymmetrical(snip: Rect, mino_blocks: [Rect; 4]) -> Self {
-        Self {
-            snip,
-            is_uniform: false,
-            mino_blocks,
-            stack_blocks: mino_blocks,
-        }
-    }
-
-    // pub fn asymmetrical_stack(snip: Rect, mino_blocks: [Rect; 4], stack_blocks: [Rect; 4]) -> Self {
-    //     Self {
-    //         snip,
-    //         is_uniform: false,
-    //         mino_blocks,
-    //         stack_blocks,
-    //     }
-    // }
-
-    fn mino(&self, id: u32) -> Rect {
-        self.mino_blocks[id as usize]
-    }
-
-    fn stack(&self, id: u32) -> Rect {
-        self.stack_blocks[id as usize]
-    }
-
-    fn requires_rotation(&self) -> bool {
-        !self.is_uniform
-    }
-}
+use crate::theme::geometry::{BoardGeometry, VISIBLE_BOARD_HEIGHT};
+use crate::theme::sprite_sheet::{TetrominoSpriteSheet, TetrominoSpriteSheetMeta};
 
 pub struct MetricSnips {
     digits: Vec<Rect>,
@@ -116,12 +57,13 @@ impl MetricSnips {
 pub struct BlockThemeOptions {
     name: String,
     config: Config,
-    sprite_file: String,
+    block_size: u32,
+    sprite_sheet_meta: TetrominoSpriteSheetMeta,
+    font_file: String,
     background_file: String,
     board_file: String,
     game_over_file: String,
-    ghost_alpha_mod: u8,
-    block_size: u32,
+    geometry: BoardGeometry,
     char_size: (u32, u32),
     num_snips: [Rect; 10],
     peek_snips: [Rect; 5],
@@ -130,18 +72,6 @@ pub struct BlockThemeOptions {
     levels: MetricSnips,
     lines: MetricSnips,
     board_point: Point,
-    game_point: Point,
-    board_width: u32,
-    buffer_height: u32,
-    board_height: u32,
-    i: TetrominoSnips,
-    j: TetrominoSnips,
-    l: TetrominoSnips,
-    o: TetrominoSnips,
-    s: TetrominoSnips,
-    t: TetrominoSnips,
-    z: TetrominoSnips,
-    garbage_block: Rect,
     background_color: Color,
     destroy_animation: DestroyAnimationType,
     game_over_animation: GameOverAnimationType,
@@ -155,16 +85,14 @@ fn translate_rects(rects: Vec<Rect>, dx: i32, dy: i32) -> Vec<Rect> {
 }
 
 impl BlockThemeOptions {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         name: String,
         config: Config,
-        sprite_file: String,
+        sprite_sheet_meta: TetrominoSpriteSheetMeta,
+        font_file: String,
         background_file: String,
         board_file: String,
         game_over_file: String,
-        ghost_alpha_mod: u8,
-        block_size: u32,
         char_size: (u32, u32),
         num_snips: [Rect; 10],
         peek_snips: [Rect; 5],
@@ -175,73 +103,55 @@ impl BlockThemeOptions {
         zero_fill: bool,
         board_point: Point,
         game_point: Point,
-        i: TetrominoSnips,
-        j: TetrominoSnips,
-        l: TetrominoSnips,
-        o: TetrominoSnips,
-        s: TetrominoSnips,
-        t: TetrominoSnips,
-        z: TetrominoSnips,
-        garbage_block: Rect,
         background_color: Color,
         destroy_animation: DestroyAnimationType,
         game_over_animation: GameOverAnimationType,
     ) -> Self {
-        let buffer_height = VISIBLE_BUFFER * block_size;
+        let block_size = sprite_sheet_meta.block_size();
+        let geometry = BoardGeometry::new(block_size, game_point);
+        let buffer_height = geometry.buffer_height() as i32;
+        let score = MetricSnips::new(
+            translate_rects(score_snips, 0, buffer_height),
+            zero_fill,
+        );
+        let levels = MetricSnips::new(
+            translate_rects(level_snips, 0, buffer_height),
+            zero_fill,
+        );
+        let lines = MetricSnips::new(
+            translate_rects(lines_snips, 0, buffer_height),
+            zero_fill,
+        );
         Self {
             name,
             config,
-            sprite_file,
+            block_size,
+            sprite_sheet_meta,
+            font_file,
             background_file,
             board_file,
             game_over_file,
-            ghost_alpha_mod,
-            block_size,
+            geometry,
             char_size,
             num_snips,
             peek_snips,
             hold_snip,
-            score: MetricSnips::new(
-                translate_rects(score_snips, 0, buffer_height as i32),
-                zero_fill,
-            ),
-            levels: MetricSnips::new(
-                translate_rects(level_snips, 0, buffer_height as i32),
-                zero_fill,
-            ),
-            lines: MetricSnips::new(
-                translate_rects(lines_snips, 0, buffer_height as i32),
-                zero_fill,
-            ),
+            score,
+            levels,
+            lines,
             board_point,
-            game_point,
-            board_width: BOARD_WIDTH * block_size,
-            board_height: BOARD_HEIGHT * block_size,
-            buffer_height: VISIBLE_BUFFER * block_size,
-            i,
-            j,
-            l,
-            o,
-            s,
-            t,
-            z,
-            garbage_block,
             background_color,
             destroy_animation,
             game_over_animation,
         }
     }
 
-    fn visible_height(&self) -> u32 {
-        self.board_height + self.buffer_height
-    }
-
     fn resource(&self, name: &str) -> String {
         format!("resource/{}/{}", self.name, name)
     }
 
-    fn sprite_file(&self) -> String {
-        self.resource(&self.sprite_file)
+    fn font_file(&self) -> String {
+        self.resource(&self.font_file)
     }
 
     fn background_file(&self) -> String {
@@ -269,74 +179,24 @@ impl BlockThemeOptions {
         self.num_snips[(digit as usize) - '0' as usize]
     }
 
-    fn j_to_y(&self, j: u32) -> u32 {
-        self.visible_height() - ((j + 1) * self.block_size)
-    }
-
-    fn row_rect(&self, j: u32) -> Rect {
-        Rect::new(
-            self.game_point.x(),
-            self.j_to_y(j) as i32,
-            BOARD_WIDTH * self.block_size,
-            self.block_size,
-        )
-    }
-
+    /// get the rect of the line in the board texture, which has no buffer
+    /// TODO move this into geometry
     fn src_row_rect(&self, j: u32) -> Rect {
         let capped_j = min(j, BOARD_HEIGHT); // the src has no buffer so protect against copying from it
-        let y = self.board_height - ((capped_j + 1) * self.block_size);
+        let y = self.geometry.height() - ((capped_j + 1) * self.geometry.block_size());
         Rect::new(
-            self.game_point.x(),
+            self.geometry.offset().x(),
             y as i32,
-            BOARD_WIDTH * self.block_size,
-            self.block_size,
-        )
-    }
-
-    fn shape(&self, shape: TetrominoShape) -> &TetrominoSnips {
-        match shape {
-            TetrominoShape::I => &self.i,
-            TetrominoShape::O => &self.o,
-            TetrominoShape::T => &self.t,
-            TetrominoShape::S => &self.s,
-            TetrominoShape::Z => &self.z,
-            TetrominoShape::J => &self.j,
-            TetrominoShape::L => &self.l,
-        }
-    }
-
-    fn sprite_snip(&self, shape: TetrominoShape) -> Rect {
-        self.shape(shape).snip
-    }
-
-    fn mino_dest_rect(&self, i: u32, j: u32) -> Rect {
-        Rect::new(
-            (i * self.block_size) as i32 + self.game_point.x(),
-            self.j_to_y(j) as i32,
-            self.block_size,
-            self.block_size,
-        )
-    }
-
-    /// returns snip of the mino in the sprite sheet and whether rotation is required
-    fn mino_snip(&self, shape: TetrominoShape, mino_id: u32, is_stack: bool) -> (Rect, bool) {
-        let snips = self.shape(shape);
-        (
-            if is_stack {
-                snips.stack(mino_id)
-            } else {
-                snips.mino(mino_id)
-            },
-            snips.requires_rotation(),
+            self.geometry.width(),
+            self.geometry.block_size(),
         )
     }
 }
 
 pub struct BlockTheme<'a> {
     options: BlockThemeOptions,
-    sprites: Texture<'a>,
-    sprites_ghost: Texture<'a>,
-    // perimeter: PerimeterRender<'a>,
+    sprite_sheet: TetrominoSpriteSheet<'a>,
+    font_texture: Texture<'a>,
     game_over: Texture<'a>,
     board_texture: Texture<'a>,
     board_texture_size: (u32, u32),
@@ -362,23 +222,8 @@ impl<'a> BlockTheme<'a> {
         texture_creator: &'a TextureCreator<WindowContext>,
         options: BlockThemeOptions,
     ) -> Result<Self, String> {
-        let sprites = texture_creator.load_texture(options.sprite_file())?;
-
-        // ghost resource are just lightened resource
-        let sprites_query = sprites.query();
-        let mut sprites_ghost = texture_creator
-            .create_texture_target(None, sprites_query.width, sprites_query.height)
-            .map_err(|e| e.to_string())?;
-        sprites_ghost.set_blend_mode(BlendMode::Blend);
-        sprites_ghost.set_alpha_mod(options.ghost_alpha_mod);
-        canvas
-            .with_texture_canvas(&mut sprites_ghost, |c| {
-                c.copy(&sprites, None, None).unwrap();
-            })
-            .map_err(|e| e.to_string())?;
-
-        // let perimeter = PerimeterRender::new(canvas, texture_creator, options.block_size)?;
-
+        let sprite_sheet = TetrominoSpriteSheet::new(canvas, texture_creator, options.sprite_sheet_meta.clone(), options.block_size)?;
+        let font_texture = texture_creator.load_texture(options.font_file())?;
         let board_texture = texture_creator.load_texture(options.board_file())?;
         let board_query = board_texture.query();
 
@@ -386,7 +231,7 @@ impl<'a> BlockTheme<'a> {
         let bg_query = bg_texture.query();
         let bg_rect = Rect::new(
             0,
-            options.buffer_height as i32,
+            options.geometry.buffer_height() as i32,
             bg_query.width,
             bg_query.height,
         );
@@ -408,9 +253,9 @@ impl<'a> BlockTheme<'a> {
 
         Ok(Self {
             options,
-            sprites,
-            sprites_ghost,
+            sprite_sheet,
             game_over,
+            font_texture,
             board_texture,
             board_texture_size: (board_query.width, board_query.height),
             bg_texture,
@@ -429,57 +274,11 @@ impl<'a> BlockTheme<'a> {
             victory_sound,
         })
     }
-
-    fn draw_tetromino(
-        &self,
-        canvas: &mut WindowCanvas,
-        sprites: &Texture,
-        rect: &Rect,
-        shape: TetrominoShape,
-    ) -> Result<(), String> {
-        let sprite_snip = self.options.sprite_snip(shape);
-        let dest_rect = Rect::from_center(rect.center(), sprite_snip.width(), sprite_snip.height());
-        canvas.copy(sprites, sprite_snip, dest_rect)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn draw_mino(
-        &self,
-        canvas: &mut WindowCanvas,
-        sprites: &Texture,
-        i: u32,
-        j: u32,
-        shape: TetrominoShape,
-        rotation: Rotation,
-        mino_id: u32,
-        is_stack: bool,
-    ) -> Result<(), String> {
-        let dest_rect = self.options.mino_dest_rect(i, j);
-        let (mino_snip, rotate) = self.options.mino_snip(shape, mino_id, is_stack);
-        if rotate {
-            canvas.copy_ex(
-                sprites,
-                mino_snip,
-                dest_rect,
-                rotation.angle(),
-                None,
-                false,
-                false,
-            )
-        } else {
-            canvas.copy(sprites, mino_snip, dest_rect)
-        }
-    }
-
-    fn draw_garbage(&self, canvas: &mut WindowCanvas, i: u32, j: u32) -> Result<(), String> {
-        let dest_rect = self.options.mino_dest_rect(i, j);
-        canvas.copy(&self.sprites, self.options.garbage_block, dest_rect)
-    }
 }
 
 impl<'a> Theme for BlockTheme<'a> {
-    fn block_size(&self) -> u32 {
-        self.options.block_size
+    fn geometry(&self) -> &BoardGeometry {
+        &self.options.geometry
     }
 
     fn background_color(&self) -> Color {
@@ -489,7 +288,7 @@ impl<'a> Theme for BlockTheme<'a> {
     fn background_size(&self) -> (u32, u32) {
         (
             self.bg_rect.width(),
-            self.bg_rect.height() + self.options.buffer_height,
+            self.bg_rect.height() + self.options.geometry.buffer_height(),
         )
     }
 
@@ -499,7 +298,7 @@ impl<'a> Theme for BlockTheme<'a> {
             self.options.board_point.x(),
             self.options.board_point.y(),
             w,
-            h + self.options.buffer_height,
+            h + self.options.geometry.buffer_height(),
         )
     }
 
@@ -514,7 +313,7 @@ impl<'a> Theme for BlockTheme<'a> {
         let score = self.options.score.format(metrics.score);
         for (index, char) in score.chars().rev().enumerate() {
             canvas.copy(
-                &self.sprites,
+                &self.font_texture,
                 self.options.digit_snip(char),
                 self.options.score.digit(index),
             )?;
@@ -523,7 +322,7 @@ impl<'a> Theme for BlockTheme<'a> {
         let level = self.options.levels.format(metrics.level);
         for (index, char) in level.chars().rev().enumerate() {
             canvas.copy(
-                &self.sprites,
+                &self.font_texture,
                 self.options.digit_snip(char),
                 self.options.levels.digit(index),
             )?;
@@ -532,25 +331,20 @@ impl<'a> Theme for BlockTheme<'a> {
         let lines = self.options.lines.format(metrics.lines);
         for (index, char) in lines.chars().rev().enumerate() {
             canvas.copy(
-                &self.sprites,
+                &self.font_texture,
                 self.options.digit_snip(char),
                 self.options.lines.digit(index),
             )?;
         }
 
         for i in 0..(min(PEEK_SIZE, self.options.peek_snips.len())) {
-            self.draw_tetromino(
-                canvas,
-                &self.sprites,
-                &self.options.peek_snips[i],
-                metrics.queue[i],
-            )?;
+            self.sprite_sheet.draw_tetromino_in_center(canvas, metrics.queue[i], self.options.peek_snips[i])?;
         }
 
         match metrics.hold {
             None => {}
             Some(shape) => {
-                self.draw_tetromino(canvas, &self.sprites, &self.options.hold_snip, shape)?;
+                self.sprite_sheet.draw_tetromino_in_center(canvas, shape, self.options.hold_snip)?;
             }
         }
         Ok(())
@@ -572,7 +366,7 @@ impl<'a> Theme for BlockTheme<'a> {
             None,
             Rect::new(
                 0,
-                self.options.buffer_height as i32,
+                self.options.geometry.buffer_height() as i32,
                 board_width,
                 board_height,
             ),
@@ -590,47 +384,21 @@ impl<'a> Theme for BlockTheme<'a> {
         if render_board {
             for j in 0..VISIBLE_BOARD_HEIGHT {
                 for (i, block) in game.row(j).iter().enumerate() {
+                    let point = self.options.geometry.mino_point(i as u32, j);
                     match block {
                         BlockState::Empty => {}
                         BlockState::Tetromino(shape, rotation, mino_id) => {
-                            self.draw_mino(
-                                canvas,
-                                &self.sprites,
-                                i as u32,
-                                j,
-                                *shape,
-                                *rotation,
-                                *mino_id,
-                                false,
-                            )?;
+                            self.sprite_sheet.draw_mino(canvas, *shape, *rotation, *mino_id, point)?;
                         }
                         BlockState::Ghost(shape, rotation, mino_id) => {
-                            // self.perimeter.draw_mino(canvas, *shape, *rotation, *mino_id, self.options.mino_dest_rect(i as u32, j))?;
-                            self.draw_mino(
-                                canvas,
-                                &self.sprites_ghost,
-                                i as u32,
-                                j,
-                                *shape,
-                                *rotation,
-                                *mino_id,
-                                false,
-                            )?;
+                            // TODO maybe some themes may like a perimeter ghost?
+                            self.sprite_sheet.draw_ghost(canvas, *shape, *rotation, *mino_id, point)?;
                         }
                         BlockState::Stack(shape, rotation, mino_id) => {
-                            self.draw_mino(
-                                canvas,
-                                &self.sprites,
-                                i as u32,
-                                j,
-                                *shape,
-                                *rotation,
-                                *mino_id,
-                                true,
-                            )?;
+                            self.sprite_sheet.draw_stack(canvas, *shape, *rotation, *mino_id, point)?;
                         }
                         BlockState::Garbage => {
-                            self.draw_garbage(canvas, i as u32, j)?;
+                            self.sprite_sheet.draw_garbage(canvas, point)?;
                         }
                     }
                 }
@@ -649,12 +417,12 @@ impl<'a> Theme for BlockTheme<'a> {
                                 canvas.copy(
                                     &self.board_texture,
                                     self.options.src_row_rect(j),
-                                    self.options.row_rect(j),
+                                    self.options.geometry.line_snip(j),
                                 )?;
                             }
                             TextureAnimate::FillAlphaRectangle { width } => {
                                 // simulate alpha by copying over the board background
-                                let row_rect = self.options.row_rect(j);
+                                let row_rect = self.options.geometry.line_snip(j);
                                 let rect_width = (row_rect.width() as f64 * width).round() as u32;
                                 let dst_rect = Rect::from_center(
                                     row_rect.center(),
@@ -675,12 +443,7 @@ impl<'a> Theme for BlockTheme<'a> {
             }
         } else {
             let game_over_query = self.game_over.query();
-            let game_snip = Rect::new(
-                self.options.game_point.x(),
-                self.options.game_point.y(),
-                self.options.board_width,
-                self.options.board_height,
-            );
+            let game_snip = self.options.geometry.game_snip();
             let game_over_snip = Rect::from_center(
                 game_snip.center(),
                 game_over_query.width,
@@ -690,16 +453,13 @@ impl<'a> Theme for BlockTheme<'a> {
         }
 
         for j in curtain_range {
-            for x in 0..BOARD_WIDTH {
-                self.draw_garbage(canvas, x, j)?;
+            for i in 0..BOARD_WIDTH {
+                let point = self.options.geometry.mino_point(i as u32, j);
+                self.sprite_sheet.draw_garbage(canvas, point)?;
             }
         }
 
         Ok(())
-    }
-
-    fn line_snip(&self, j: u32) -> Rect {
-        self.options.row_rect(j)
     }
 
     fn destroy_animation_type(&self) -> DestroyAnimationType {
@@ -751,9 +511,5 @@ impl<'a> Theme for BlockTheme<'a> {
             GameEvent::Paused => play_sound(&self.pause_sound),
             _ => Ok(()),
         }
-    }
-
-    fn mino_rects(&self, minos: Minos) -> [Rect; 4] {
-        minos.map(|mino| self.options.mino_dest_rect(mino.x as u32, mino.y as u32))
     }
 }

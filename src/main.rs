@@ -371,7 +371,7 @@ impl TetrisSdl {
         let particle_scale = particles::scale::Scale::new(window_size);
         let mut particles = ParticleRender::new(Particles::new(10000), &self.texture_creator, particle_scale)?;
 
-        themes.theme_mut().music().play(-1)?;
+        themes.theme().music().play(-1)?;
         let paused_screen = PausedScreen::new(&mut self.canvas, &self.ttf, &self.texture_creator, window_size)?;
 
         let mut player_hard_drop_animations: HashMap<u32, HardDropAnimation> = HashMap::new();
@@ -381,6 +381,8 @@ impl TetrisSdl {
             let now = SystemTime::now();
             let delta = now.duration_since(t0).map_err(|e| e.to_string())?;
             t0 = now;
+
+            let mut to_emit_particles = vec![];
 
             fixture.unset_flags();
             for hard_dropping_player in player_hard_drop_animations.keys() {
@@ -416,7 +418,7 @@ impl TetrisSdl {
                 })
                 .collect::<Vec<GameEvent>>();
 
-            for event in events.iter() {
+            for event in events.into_iter() {
                 match event {
                     GameEvent::Quit => break 'game,
                     GameEvent::Paused => sdl2::mixer::Music::pause(),
@@ -428,11 +430,11 @@ impl TetrisSdl {
                         // handle music
                         match fixture.state() {
                             MatchState::Normal => {
-                                themes.theme_mut().music().fade_in(-1, 1000)?;
+                                themes.theme().music().fade_in(-1, 1000)?;
                             }
                             MatchState::Paused => {
                                 // switch music but pause it immediately
-                                themes.theme_mut().music().play(-1)?;
+                                themes.theme().music().play(-1)?;
                                 sdl2::mixer::Music::pause();
                             }
                             _ => {}
@@ -444,20 +446,23 @@ impl TetrisSdl {
                         dropped_rows,
                     } => {
                         let theme = themes.current();
-                        let mino_rects = theme.mino_rects(*player_id, *minos);
-                        let dropped_pixels = theme.rows_to_pixels(*dropped_rows);
+                        let mino_rects = theme.mino_rects(player_id, minos);
+                        let dropped_pixels = theme.rows_to_pixels(dropped_rows);
                         let hard_drop_animation = HardDropAnimation::new(
                             &self.canvas,
                             &self.texture_creator,
                             mino_rects,
                             dropped_pixels,
                         )?;
-                        player_hard_drop_animations.insert(*player_id, hard_drop_animation);
+                        player_hard_drop_animations.insert(player_id, hard_drop_animation);
                     }
                     _ => {}
                 }
 
-                themes.theme_mut().receive_event(*event)?;
+                themes.theme_mut().play_sound_effects(event)?;
+                if let Some(emit) = themes.theme().emit_particles(event) {
+                    to_emit_particles.push(emit);
+                }
             }
 
             match fixture.state() {
@@ -483,18 +488,26 @@ impl TetrisSdl {
                 MatchState::Normal if !themes.is_fading() => {
                     let mut garbage: Vec<(u32, u32)> = vec![];
                     let mut new_game_over: Option<u32> = None;
+                    let mut next_theme = false;
                     for player in fixture.players.iter_mut() {
+                        if let Some(emit) = player.current_particles() {
+                            to_emit_particles.push(emit);
+                        }
+
                         if player.update_destroy_animation(delta) {
                             continue;
                         }
                         if player_hard_drop_animations.contains_key(&player.player) {
                             continue;
                         }
+
                         let event = player.game.update(delta);
                         if event.is_none() {
                             continue;
                         }
-                        match event.unwrap() {
+
+                        let event = event.unwrap();
+                        match event {
                             GameEvent::GameOver(_) => {
                                 new_game_over = Some(player.player);
                             }
@@ -515,10 +528,8 @@ impl TetrisSdl {
                                     let level = player.game.level();
                                     if level > max_level {
                                         // todo option to disable this in config
+                                        next_theme = true;
                                         max_level = level;
-                                        themes.start_fade(&mut self.canvas)?;
-                                        themes.next();
-                                        themes.theme_mut().music().fade_in(-1, 1000)?;
                                     }
                                 }
 
@@ -528,14 +539,17 @@ impl TetrisSdl {
                             }
                             _ => {}
                         }
-                        themes.theme_mut().receive_event(event.unwrap())?;
+                        themes.theme_mut().play_sound_effects(event)?;
+                        if let Some(emit) = themes.theme().emit_particles(event) {
+                            to_emit_particles.push(emit);
+                        }
                     }
 
                     // maybe start game over
                     if let Some(winner) = fixture.check_for_winning_player() {
                         sdl2::mixer::Music::halt();
                         fixture.set_winner(winner, themes.theme().game_over_animation_type());
-                        themes.theme_mut().receive_event(GameEvent::Victory)?;
+                        themes.theme_mut().play_sound_effects(GameEvent::Victory)?;
                     } else if new_game_over.is_some() {
                         if let Some(loser) = new_game_over {
                             sdl2::mixer::Music::halt();
@@ -547,6 +561,13 @@ impl TetrisSdl {
                         // maybe send garbage
                         for (from_player, send_garbage_lines) in garbage {
                             fixture.send_garbage(from_player, send_garbage_lines);
+                        }
+
+                        // maybe change the theme
+                        if next_theme {
+                            themes.start_fade(&mut self.canvas)?;
+                            themes.next();
+                            themes.theme().music().fade_in(-1, 1000)?;
                         }
                     }
                 }
@@ -598,12 +619,8 @@ impl TetrisSdl {
 
 
             // particles
-            for player in fixture.players.iter() {
-                for (j, emit) in player.current_particles() {
-                    let line_snip = themes.player_line_snip(player.player, j);
-                    let source = emit.build_rect_source(&particle_scale, line_snip);
-                    particles.add_source(source);
-                };
+            for emit in to_emit_particles.into_iter() {
+                particles.add_source(emit.into_source(&themes, &particle_scale));
             }
 
             if !fixture.state().is_paused() {
@@ -619,7 +636,7 @@ impl TetrisSdl {
             }
             for player_id in remove_hard_drop_animations {
                 player_hard_drop_animations.remove(&player_id);
-                fixture.player_mut(player_id).impact()
+                fixture.player_mut(player_id).impact();
             }
 
             if fixture.state().is_paused() {
@@ -641,7 +658,7 @@ impl TetrisSdl {
 
         particles.add_source(
             ParticleSource::new(
-                particle_scale.rect_lattice(rect),
+                particle_scale.rect_lattice(&[rect]),
                 ParticleModulation::Constant { count: 200, step: Duration::from_secs(3) }
             ).with_velocity((PointF::new(0.0, -0.4), PointF::new(0.1, 0.1)))
                 .with_gravity(1.5)

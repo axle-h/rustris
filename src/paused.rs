@@ -12,7 +12,7 @@ pub struct PausedScreen<'a> {
 impl<'a> PausedScreen<'a> {
     pub fn new(canvas: &mut WindowCanvas, ttf: &Sdl2TtfContext, texture_creator: &'a TextureCreator<WindowContext>, (window_width, window_height): (u32, u32)) -> Result<Self, String> {
         let font = FontType::Bold.load(ttf, window_width / 24)?;
-        let font_texture = FontTexture::new(&font, texture_creator, "Paused", Color::BLACK)?;
+        let font_texture = FontTexture::from_string(&font, texture_creator, "Paused", Color::BLACK)?;
         let font_rect = Rect::from_center((window_width as i32 / 2, window_height as i32 / 2), font_texture.width, font_texture.height);
 
         let mut texture = texture_creator

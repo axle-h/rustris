@@ -1,7 +1,8 @@
 use std::time::Duration;
 
-const ACCELERATION: u32 = 20;
-const SPEED: u32 = 10;
+const ACCELERATION: f64 = 10.0;
+const SPEED: f64 = 5.0;
+const LIMIT: f64 = 0.25;
 
 #[derive(Clone, Copy, Debug)]
 pub enum State {
@@ -55,7 +56,7 @@ impl ImpactAnimation {
                 let duration_secs = duration.as_secs_f64();
                 let speed = speed + acceleration * duration_secs;
                 self.offset_y += speed * duration_secs;
-                if self.offset_y > 1.0 {
+                if self.offset_y > LIMIT {
                     State::Return {
                         acceleration,
                         speed: 0.0,

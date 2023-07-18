@@ -13,7 +13,7 @@ use crate::high_score::NewHighScore;
 use rand::Rng;
 
 use std::time::Duration;
-use crate::particles::prescribed::PrescribedParticles;
+use crate::particles::prescribed::{PlayerParticleTarget, PlayerTargetedParticles};
 
 pub struct Player {
     pub player: u32,
@@ -84,22 +84,17 @@ impl Player {
         }
     }
 
-    pub fn current_particles(&self) -> Vec<(u32, PrescribedParticles)> {
-        match &self.destroy_animation {
-            None => vec![],
-            Some(animation) => match animation.current() {
-                Some(animate) =>
-                    if let TextureAnimate::EmitParticles(particles) = animate {
-                        compact_destroy_lines(animation.lines())
-                            .into_iter()
-                            .map(|y| (y, particles))
-                            .collect()
-                    } else {
-                        vec![]
-                    }
-                _ => vec![],
-            },
-        }
+    pub fn current_particles(&self) -> Option<PlayerTargetedParticles> {
+        self.destroy_animation.as_ref()
+            .map(|animation| animation.current().map(|animate| (animate, animation.lines())))
+            .flatten()
+            .map(|(animate, lines)| if let TextureAnimate::EmitParticles(particles) = animate {
+                let target = PlayerParticleTarget::DestroyedLines(lines);
+                Some(particles.into_targeted(self.player, target))
+            } else {
+                None
+            })
+            .flatten()
     }
 }
 

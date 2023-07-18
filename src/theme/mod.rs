@@ -9,16 +9,18 @@ use sdl2::mixer::Music;
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
 use sdl2::render::{Texture, WindowCanvas};
+use crate::particles::prescribed::PlayerTargetedParticles;
 use crate::theme::geometry::BoardGeometry;
 
-mod block_theme;
+mod retro;
 pub mod game_boy;
 pub mod nes;
 pub mod snes;
 pub mod sound;
 pub mod sprite_sheet;
-pub mod vector;
+pub mod modern;
 pub mod geometry;
+pub mod font;
 
 pub trait Theme {
     fn geometry(&self) -> &BoardGeometry;
@@ -37,7 +39,8 @@ pub trait Theme {
     fn destroy_animation_type(&self) -> DestroyAnimationType;
     fn game_over_animation_type(&self) -> GameOverAnimationType;
     fn music(&self) -> &Music;
-    fn receive_event(&mut self, event: GameEvent) -> Result<(), String>;
+    fn play_sound_effects(&mut self, event: GameEvent) -> Result<(), String>;
+    fn emit_particles(&self, event: GameEvent) -> Option<PlayerTargetedParticles>;
 }
 
 // const REFERENCE_I: Color = Color::CYAN;

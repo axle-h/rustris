@@ -9,7 +9,7 @@ use crate::game::geometry::Rotation;
 use crate::game::random::PEEK_SIZE;
 use crate::game::tetromino::{Minos, TetrominoShape};
 use crate::game::Game;
-use crate::theme::sound::{load_sound, play_sound};
+use crate::theme::sound::{load_sound, play_sound, SoundTheme, SoundThemeOptions};
 use crate::theme::Theme;
 use sdl2::image::LoadTexture;
 use sdl2::mixer::{Chunk, Music};
@@ -18,56 +18,23 @@ use sdl2::rect::{Point, Rect};
 use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::video::WindowContext;
 use std::cmp::min;
+use crate::particles::prescribed::PlayerTargetedParticles;
+use crate::theme::font::{FontRender, FontRenderOptions, MetricSnips};
 use crate::theme::geometry::{BoardGeometry, VISIBLE_BOARD_HEIGHT};
 use crate::theme::sprite_sheet::{TetrominoSpriteSheet, TetrominoSpriteSheetMeta};
 
-pub struct MetricSnips {
-    digits: Vec<Rect>,
-    max_value: u32,
-    zero_fill: bool,
-}
-
-impl MetricSnips {
-    fn new(digits: Vec<Rect>, zero_fill: bool) -> Self {
-        let max_string: String = (0..digits.len()).map(|_| '9').collect();
-        Self {
-            digits,
-            max_value: max_string.parse().unwrap(),
-            zero_fill,
-        }
-    }
-
-    fn digit(&self, id: usize) -> Rect {
-        self.digits[id]
-    }
-
-    fn format(&self, value: u32) -> String {
-        let s = format!("{}", value.min(self.max_value));
-        if self.zero_fill {
-            let fill_len = self.digits.len() - s.len();
-            let mut result: String = (0..fill_len).map(|_| '0').collect();
-            result.push_str(&s);
-            result
-        } else {
-            s
-        }
-    }
-}
-
-pub struct BlockThemeOptions {
+pub struct RetroThemeOptions {
     name: String,
     config: Config,
     block_size: u32,
     sprite_sheet_meta: TetrominoSpriteSheetMeta,
-    font_file: String,
     background_file: String,
     board_file: String,
     game_over_file: String,
     geometry: BoardGeometry,
-    char_size: (u32, u32),
-    num_snips: [Rect; 10],
     peek_snips: [Rect; 5],
     hold_snip: Rect,
+    font_options: FontRenderOptions,
     score: MetricSnips,
     levels: MetricSnips,
     lines: MetricSnips,
@@ -75,83 +42,58 @@ pub struct BlockThemeOptions {
     background_color: Color,
     destroy_animation: DestroyAnimationType,
     game_over_animation: GameOverAnimationType,
+    sound: SoundThemeOptions
 }
 
-fn translate_rects(rects: Vec<Rect>, dx: i32, dy: i32) -> Vec<Rect> {
-    rects
-        .into_iter()
-        .map(|r| Rect::new(r.x + dx, r.y + dy, r.width(), r.height()))
-        .collect()
-}
-
-impl BlockThemeOptions {
+impl RetroThemeOptions {
     pub fn new(
-        name: String,
+        name: &str,
         config: Config,
         sprite_sheet_meta: TetrominoSpriteSheetMeta,
-        font_file: String,
-        background_file: String,
-        board_file: String,
-        game_over_file: String,
-        char_size: (u32, u32),
-        num_snips: [Rect; 10],
+        background_file: &str,
+        board_file: &str,
+        game_over_file: &str,
         peek_snips: [Rect; 5],
         hold_snip: Rect,
-        score_snips: Vec<Rect>,
-        level_snips: Vec<Rect>,
-        lines_snips: Vec<Rect>,
-        zero_fill: bool,
+        font_options: FontRenderOptions,
+        score: MetricSnips,
+        levels: MetricSnips,
+        lines: MetricSnips,
         board_point: Point,
         game_point: Point,
         background_color: Color,
         destroy_animation: DestroyAnimationType,
         game_over_animation: GameOverAnimationType,
+        sound: SoundThemeOptions
     ) -> Self {
         let block_size = sprite_sheet_meta.block_size();
         let geometry = BoardGeometry::new(block_size, game_point);
         let buffer_height = geometry.buffer_height() as i32;
-        let score = MetricSnips::new(
-            translate_rects(score_snips, 0, buffer_height),
-            zero_fill,
-        );
-        let levels = MetricSnips::new(
-            translate_rects(level_snips, 0, buffer_height),
-            zero_fill,
-        );
-        let lines = MetricSnips::new(
-            translate_rects(lines_snips, 0, buffer_height),
-            zero_fill,
-        );
         Self {
-            name,
+            name: name.to_string(),
             config,
             block_size,
             sprite_sheet_meta,
-            font_file,
-            background_file,
-            board_file,
-            game_over_file,
+            background_file: background_file.to_string(),
+            board_file: board_file.to_string(),
+            game_over_file: game_over_file.to_string(),
             geometry,
-            char_size,
-            num_snips,
             peek_snips,
             hold_snip,
-            score,
-            levels,
-            lines,
+            font_options,
+            score: score.offset(0, buffer_height),
+            levels: levels.offset(0, buffer_height),
+            lines: lines.offset(0, buffer_height),
             board_point,
             background_color,
             destroy_animation,
             game_over_animation,
+            sound
         }
     }
 
     fn resource(&self, name: &str) -> String {
         format!("resource/{}/{}", self.name, name)
-    }
-
-    fn font_file(&self) -> String {
-        self.resource(&self.font_file)
     }
 
     fn background_file(&self) -> String {
@@ -164,19 +106,6 @@ impl BlockThemeOptions {
 
     fn game_over_file(&self) -> String {
         self.resource(&self.game_over_file)
-    }
-
-    fn load_music<'a>(&self) -> Result<Music<'a>, String> {
-        Music::from_file(self.resource("music.ogg"))
-    }
-
-    fn load_sound(&self, name: &str) -> Result<Chunk, String> {
-        load_sound(&self.name, name, self.config)
-    }
-
-    fn digit_snip(&self, digit: char) -> Rect {
-        assert!(digit.is_ascii_digit());
-        self.num_snips[(digit as usize) - '0' as usize]
     }
 
     /// get the rect of the line in the board texture, which has no buffer
@@ -193,37 +122,25 @@ impl BlockThemeOptions {
     }
 }
 
-pub struct BlockTheme<'a> {
-    options: BlockThemeOptions,
+pub struct RetroTheme<'a> {
+    options: RetroThemeOptions,
     sprite_sheet: TetrominoSpriteSheet<'a>,
-    font_texture: Texture<'a>,
+    font: FontRender<'a>,
     game_over: Texture<'a>,
     board_texture: Texture<'a>,
     board_texture_size: (u32, u32),
     bg_texture: Texture<'a>,
     bg_rect: Rect,
-    music: Music<'a>,
-    move_sound: Chunk,
-    rotate_sound: Chunk,
-    lock_sound: Chunk,
-    send_garbage_sound: Chunk,
-    stack_drop_sound: Option<Chunk>,
-    line_clear_sound: Chunk,
-    level_up_sound: Chunk,
-    game_over_sound: Chunk,
-    tetris_sound: Chunk,
-    pause_sound: Chunk,
-    victory_sound: Chunk,
+    sound: SoundTheme<'a>
 }
 
-impl<'a> BlockTheme<'a> {
+impl<'a> RetroTheme<'a> {
     pub fn new(
         canvas: &mut WindowCanvas,
         texture_creator: &'a TextureCreator<WindowContext>,
-        options: BlockThemeOptions,
+        options: RetroThemeOptions,
     ) -> Result<Self, String> {
         let sprite_sheet = TetrominoSpriteSheet::new(canvas, texture_creator, options.sprite_sheet_meta.clone(), options.block_size)?;
-        let font_texture = texture_creator.load_texture(options.font_file())?;
         let board_texture = texture_creator.load_texture(options.board_file())?;
         let board_query = board_texture.query();
 
@@ -236,47 +153,26 @@ impl<'a> BlockTheme<'a> {
             bg_query.height,
         );
 
-        let game_over = texture_creator.load_texture(options.game_over_file())?;
+        let font = options.font_options.build(texture_creator)?;
 
-        let music = options.load_music()?;
-        let move_sound = options.load_sound("move")?;
-        let rotate_sound = options.load_sound("rotate")?;
-        let lock_sound = options.load_sound("lock")?;
-        let send_garbage_sound = options.load_sound("send-garbage")?;
-        let stack_drop_sound = options.load_sound("stack-drop").ok(); // optional
-        let line_clear_sound = options.load_sound("line-clear")?;
-        let level_up_sound = options.load_sound("level-up")?;
-        let game_over_sound = options.load_sound("game-over")?;
-        let tetris_sound = options.load_sound("tetris")?;
-        let pause_sound = options.load_sound("pause")?;
-        let victory_sound = options.load_sound("victory")?;
+        let game_over = texture_creator.load_texture(options.game_over_file())?;
+        let sound = options.sound.clone().build()?;
 
         Ok(Self {
             options,
             sprite_sheet,
             game_over,
-            font_texture,
+            font,
             board_texture,
             board_texture_size: (board_query.width, board_query.height),
             bg_texture,
             bg_rect,
-            music,
-            move_sound,
-            rotate_sound,
-            lock_sound,
-            send_garbage_sound,
-            stack_drop_sound,
-            line_clear_sound,
-            level_up_sound,
-            game_over_sound,
-            tetris_sound,
-            pause_sound,
-            victory_sound,
+            sound,
         })
     }
 }
 
-impl<'a> Theme for BlockTheme<'a> {
+impl<'a> Theme for RetroTheme<'a> {
     fn geometry(&self) -> &BoardGeometry {
         &self.options.geometry
     }
@@ -310,32 +206,9 @@ impl<'a> Theme for BlockTheme<'a> {
         // background
         canvas.copy(&self.bg_texture, None, self.bg_rect)?;
 
-        let score = self.options.score.format(metrics.score);
-        for (index, char) in score.chars().rev().enumerate() {
-            canvas.copy(
-                &self.font_texture,
-                self.options.digit_snip(char),
-                self.options.score.digit(index),
-            )?;
-        }
-
-        let level = self.options.levels.format(metrics.level);
-        for (index, char) in level.chars().rev().enumerate() {
-            canvas.copy(
-                &self.font_texture,
-                self.options.digit_snip(char),
-                self.options.levels.digit(index),
-            )?;
-        }
-
-        let lines = self.options.lines.format(metrics.lines);
-        for (index, char) in lines.chars().rev().enumerate() {
-            canvas.copy(
-                &self.font_texture,
-                self.options.digit_snip(char),
-                self.options.lines.digit(index),
-            )?;
-        }
+        self.font.render_number(canvas, self.options.score, metrics.score)?;
+        self.font.render_number(canvas, self.options.levels, metrics.level)?;
+        self.font.render_number(canvas, self.options.lines, metrics.lines)?;
 
         for i in 0..(min(PEEK_SIZE, self.options.peek_snips.len())) {
             self.sprite_sheet.draw_tetromino_in_center(canvas, metrics.queue[i], self.options.peek_snips[i])?;
@@ -471,45 +344,14 @@ impl<'a> Theme for BlockTheme<'a> {
     }
 
     fn music(&self) -> &Music {
-        &self.music
+        self.sound.music()
     }
 
-    fn receive_event(&mut self, event: GameEvent) -> Result<(), String> {
-        match event {
-            GameEvent::Move => play_sound(&self.move_sound),
-            GameEvent::Rotate => play_sound(&self.rotate_sound),
-            GameEvent::Lock => play_sound(&self.lock_sound),
-            GameEvent::Destroy(lines) => {
-                let mut count = 0;
-                for line in lines {
-                    if line.is_some() {
-                        count += 1;
-                    } else {
-                        break;
-                    }
-                }
-                if count >= 4 {
-                    play_sound(&self.tetris_sound)
-                } else if count > 0 {
-                    play_sound(&self.line_clear_sound)
-                } else {
-                    Ok(())
-                }
-            }
-            GameEvent::Destroyed { level_up, .. } => {
-                if level_up {
-                    play_sound(&self.level_up_sound)
-                } else if self.stack_drop_sound.is_some() {
-                    play_sound(self.stack_drop_sound.as_ref().unwrap())
-                } else {
-                    Ok(())
-                }
-            }
-            GameEvent::ReceivedGarbage => play_sound(&self.send_garbage_sound),
-            GameEvent::GameOver(_) => play_sound(&self.game_over_sound),
-            GameEvent::Victory => play_sound(&self.victory_sound),
-            GameEvent::Paused => play_sound(&self.pause_sound),
-            _ => Ok(()),
-        }
+    fn play_sound_effects(&mut self, event: GameEvent) -> Result<(), String> {
+        self.sound.receive_event(event)
+    }
+
+    fn emit_particles(&self, event: GameEvent) -> Option<PlayerTargetedParticles> {
+        None
     }
 }

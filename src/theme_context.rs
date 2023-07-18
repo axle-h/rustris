@@ -10,7 +10,7 @@ use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::video::WindowContext;
 use std::time::Duration;
 use sdl2::ttf::Sdl2TtfContext;
-use crate::theme::vector::VectorTheme;
+use crate::theme::modern::ModernTheme;
 
 const THEME_FADE_DURATION: Duration = Duration::from_millis(1000);
 const THEMES: usize = 4;
@@ -79,7 +79,7 @@ pub struct ScaledTheme<'a> {
 
 impl<'a> ScaledTheme<'a> {
     fn new(theme: Box<dyn Theme + 'a>, players: u32, window_size: (u32, u32)) -> Self {
-        let scale = Scale::new(players, theme.background_size(), window_size);
+        let scale = Scale::new(players, theme.background_size(), window_size, theme.geometry().block_size());
         let (theme_width, theme_height) = theme.background_size();
         let bg_source_snip = Rect::new(0, 0, theme_width, theme_height);
         let board_rect = theme.board_snip();
@@ -135,7 +135,7 @@ impl<'a> ThemeContext<'a> {
         //let game_boy_green = GameBoyPalette::GreenSoup.theme(canvas, texture_creator, config)?;
         let nes = nes_theme(canvas, texture_creator, config)?;
         let snes = snes_theme(canvas, texture_creator, config)?;
-        let vector = VectorTheme::new(canvas, texture_creator, ttf, window_height)?;
+        let modern = ModernTheme::new(canvas, texture_creator, ttf, config, window_height)?;
 
         let mut fade_buffer = texture_creator
             .create_texture_target(None, window_width, window_height)
@@ -143,7 +143,7 @@ impl<'a> ThemeContext<'a> {
         fade_buffer.set_blend_mode(BlendMode::Blend);
 
 
-        let themes: [Box<dyn Theme>; THEMES] = [Box::new(vector), Box::new(game_boy), Box::new(nes), Box::new(snes)];
+        let themes: [Box<dyn Theme>; THEMES] = [Box::new(modern), Box::new(game_boy), Box::new(nes), Box::new(snes)];
         Ok(Self {
             current: 0,
             themes: themes
@@ -192,6 +192,19 @@ impl<'a> ThemeContext<'a> {
         )
     }
 
+    pub fn player_mino_snips(&self, player: u32, minos: Minos) -> [Rect; 4] {
+        let theme = &self.themes[self.current];
+        let player = theme.player_themes.get(player as usize - 1).unwrap();
+        theme.theme.geometry().mino_rects(minos)
+            .map(|r| theme.scale.scale_and_offset_rect(
+                r, player.board_snip.x(), player.board_snip.y()))
+    }
+
+    pub fn player_board_snip(&self, player: u32) -> Rect {
+        let theme = &self.themes[self.current];
+        theme.player_themes.get(player as usize - 1).unwrap().board_snip
+    }
+
     pub fn current(&self) -> &ScaledTheme {
         &self.themes[self.current]
     }
@@ -238,7 +251,7 @@ impl<'a> ThemeContext<'a> {
                     let dst =
                         current
                             .scale
-                            .offset_scaled_rect(player.board_snip, offset_x, offset_y);
+                            .offset_proportional_to_block_size(player.board_snip, offset_x, offset_y);
                     canvas.copy(texture, current.board_source_snip, dst)?;
                 }
             }

@@ -19,18 +19,23 @@ struct Particle {
     position: PointF,
     velocity: PointF,
     acceleration: PointF,
+    max_alpha: f64,
     alpha: f64,
-    color: ParticleColor
+    color: ParticleColor,
+    time_to_live: Option<f64>,
 }
 
 impl Particle {
     fn new(source: &ParticleSource, position: PointF) -> Self {
+        let max_alpha = source.alpha().next();
         Self {
             position,
             velocity: source.velocity().next(),
             acceleration: source.acceleration().next(),
-            alpha: if source.fade_in().is_some() { 0.0 } else { 1.0 },
-            color: source.color().next()
+            alpha: if source.fade_in().is_some() { 0.0 } else { max_alpha },
+            max_alpha,
+            color: source.color().next(),
+            time_to_live: if let Some(lifetime) = source.lifetime_secs() { Some(lifetime.next()) } else { None },
         }
     }
 
@@ -45,9 +50,9 @@ impl Particle {
 
 struct ParticleGroup {
     lifetime: f64,
-    time_to_live: Option<f64>,
     anchor_for: Option<f64>,
     fade_in: Option<f64>,
+    fade_out: bool,
     particles: Vec<Particle>,
 }
 
@@ -55,18 +60,22 @@ impl ParticleGroup {
     fn new(source: &ParticleSource, positions: Vec<PointF>) -> Self {
         Self {
             lifetime: 0.0,
-            time_to_live: if let Some(lifetime) = &source.lifetime_secs() { Some(lifetime.next()) } else { None },
             anchor_for: source.anchor_for().map(|d| d.as_secs_f64()),
             fade_in: source.fade_in().map(|d| d.as_secs_f64()),
+            fade_out: source.fade_out(),
             particles: positions.into_iter().map(|p| Particle::new(source, p)).collect()
         }
     }
 
-    fn remove_escaped_particles(&mut self) {
+    fn remove_dead_particles(&mut self) {
         let mut to_remove = vec![];
         for (index, particle) in self.particles.iter().enumerate() {
             if particle.is_escaped() {
                 to_remove.push(index);
+            } else if let Some(time_to_live) = particle.time_to_live {
+                if self.lifetime >= time_to_live {
+                    to_remove.push(index);
+                }
             }
         }
         for index in to_remove.into_iter().rev() {
@@ -114,14 +123,7 @@ impl Particles {
         let mut to_remove = vec![];
         for (i, group) in self.particles.iter_mut().enumerate() {
             group.lifetime += delta_time;
-
-            if let Some(time_to_live) = group.time_to_live {
-                if group.lifetime >= time_to_live {
-                    to_remove.push(i);
-                }
-            }
-
-            group.remove_escaped_particles();
+            group.remove_dead_particles();
             if group.is_empty() {
                 to_remove.push(i);
             }
@@ -153,7 +155,15 @@ impl Particles {
                     group.fade_in = None;
                 } else {
                     for particle in group.particles.iter_mut() {
-                        particle.alpha = 1.0_f64.min(group.lifetime / fade_in);
+                        particle.alpha = particle.max_alpha * group.lifetime.min(fade_in) / fade_in;
+                    }
+                }
+            }
+
+            if group.fade_out {
+                for particle in group.particles.iter_mut() {
+                    if let Some(ttl) = particle.time_to_live {
+                        particle.alpha = particle.max_alpha * (1.0 - group.lifetime.min(ttl) / ttl);
                     }
                 }
             }

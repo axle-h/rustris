@@ -51,8 +51,12 @@ impl Scale {
         ParticlePositionSource::Rect(self.rect_to_particle_space(rect.into()))
     }
 
-    pub fn rect_lattice<R : Into<Rect>>(&self, rect: R) -> ParticlePositionSource {
-        let rect = rect.into();
+    pub fn rect_lattice(&self, rects: &[Rect]) -> ParticlePositionSource {
+        let points = rects.into_iter().flat_map(|r| self.lattice_points(*r)).collect();
+        ParticlePositionSource::Lattice(points)
+    }
+
+    fn lattice_points(&self, rect: Rect) -> Vec<PointF> {
         let rows = max(rect.height() as usize / LATTICE_SCALE, 3);
         let cols = max(rect.width() as usize / LATTICE_SCALE, 3);
 
@@ -61,11 +65,10 @@ impl Scale {
         let cell_width = (rect.width() as f64 / (cols - 1) as f64).round() as i32;
         let cell_height = (rect.height() as f64 / (rows - 1) as f64).round() as i32;
 
-        let points = (0..rows as i32)
+        (0..rows as i32)
             .flat_map(|j| (0..cols as i32).map(move |i| Point::new(rect.x() + i * cell_width, rect.y() + j * cell_height)))
             .map(|p| self.point_to_particle_space(p))
-            .collect::<Vec<PointF>>();
-        ParticlePositionSource::Lattice(points)
+            .collect::<Vec<PointF>>()
     }
 }
 

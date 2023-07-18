@@ -42,9 +42,9 @@ impl<'a> HighScoreTableRow<'a> {
     fn new(font: &Font, texture_creator: &'a TextureCreator<WindowContext>, ordinal: &str, name: &str, score: &str) -> Result<Self, String> {
         Ok(
             Self {
-                ordinal: FontTexture::new(font, texture_creator, ordinal, FONT_COLOR)?,
-                name: FontTexture::new(font, texture_creator, name, FONT_COLOR)?,
-                score: FontTexture::new(font, texture_creator, score, FONT_COLOR)?,
+                ordinal: FontTexture::from_string(font, texture_creator, ordinal, FONT_COLOR)?,
+                name: FontTexture::from_string(font, texture_creator, name, FONT_COLOR)?,
+                score: FontTexture::from_string(font, texture_creator, score, FONT_COLOR)?,
             }
         )
     }
@@ -222,7 +222,7 @@ impl<'a, 'ttf> HighScoreRender<'a, 'ttf> {
         );
 
         let title_text = entry.as_ref().map(|e| e.title_text()).unwrap_or("High Scores".to_string());
-        let title = FontTexture::new(&font_title, texture_creator, &title_text, FONT_COLOR)?;
+        let title = FontTexture::from_string(&font_title, texture_creator, &title_text, FONT_COLOR)?;
         let title_rect = Rect::new((window_width - title.width) as i32 / 2, padding as i32, title.width, title.height);
 
         Ok(Self {
@@ -266,7 +266,7 @@ impl<'a, 'ttf> HighScoreRender<'a, 'ttf> {
         let result = f(entry);
         if result.is_some() {
             let row = self.rows.get_mut(entry.ordinal + 1).unwrap();
-            row.name = FontTexture::new(&self.font, self.texture_creator, &entry.name(), FONT_COLOR).unwrap();
+            row.name = FontTexture::from_string(&self.font, self.texture_creator, &entry.name(), FONT_COLOR).unwrap();
             entry.update_carets(&self.font).unwrap();
         }
         result

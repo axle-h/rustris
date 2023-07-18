@@ -41,10 +41,12 @@ pub struct ParticleSource {
     modulation: ParticleModulation,
     anchor_for: Option<Duration>,
     fade_in: Option<Duration>,
+    fade_out: bool,
     lifetime_secs: Option<VariableQuantity<f64>>,
     velocity: VariableQuantity<PointF>,
     acceleration: VariableQuantity<PointF>,
-    color: VariableQuantity<ParticleColor>
+    color: VariableQuantity<ParticleColor>,
+    alpha: VariableQuantity<f64>,
 }
 
 impl ParticleSource {
@@ -54,12 +56,21 @@ impl ParticleSource {
             position_source, modulation,
             anchor_for: None,
             fade_in: None,
+            fade_out: false,
             lifetime_secs: None,
             velocity: VariableQuantity::new(PointF::ZERO, PointF::ZERO),
             acceleration: VariableQuantity::new(PointF::ZERO, PointF::ZERO),
-            color: VariableQuantity::new(ParticleColor::WHITE, ParticleColor::WHITE),
+            color: VariableQuantity::new(ParticleColor::WHITE, ParticleColor::ZERO),
+            alpha: VariableQuantity::new(1.0, 0.0)
         }
     }
+
+    pub fn with_alpha<A : Into<VariableQuantity<f64>>>(&self, value: A) -> Self {
+        let mut result = self.clone();
+        result.alpha = value.into();
+        result
+    }
+
 
     pub fn with_color<C : Into<VariableQuantity<ParticleColor>>>(&self, value: C) -> Self {
         let mut result = self.clone();
@@ -76,6 +87,13 @@ impl ParticleSource {
     pub fn with_fade_in(&self, value: Duration) -> Self {
         let mut result = self.clone();
         result.fade_in = Some(value);
+        result
+    }
+
+    pub fn with_fade_out<L : Into<VariableQuantity<f64>>>(&self, value: L) -> Self {
+        let mut result = self.clone();
+        result.fade_out = true;
+        result.lifetime_secs = Some(value.into());
         result
     }
 
@@ -152,12 +170,18 @@ impl ParticleSource {
         }
     }
 
+
+
     pub fn anchor_for(&self) -> Option<Duration> {
         self.anchor_for
     }
 
     pub fn fade_in(&self) -> Option<Duration> {
         self.fade_in
+    }
+
+    pub fn fade_out(&self) -> bool {
+        self.fade_out
     }
 
     pub fn lifetime_secs(&self) -> &Option<VariableQuantity<f64>> {
@@ -174,6 +198,10 @@ impl ParticleSource {
 
     pub fn color(&self) -> &VariableQuantity<ParticleColor> {
         &self.color
+    }
+
+    pub fn alpha(&self) -> &VariableQuantity<f64> {
+        &self.alpha
     }
 }
 

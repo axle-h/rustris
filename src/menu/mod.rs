@@ -4,7 +4,7 @@ use crate::theme::sound::{load_sound, play_sound};
 
 use crate::build_info::BUILD_INFO;
 use sdl2::image::LoadTexture;
-use sdl2::mixer::{Chunk, Music};
+use sdl2::mixer::Chunk;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};

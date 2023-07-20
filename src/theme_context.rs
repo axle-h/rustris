@@ -1,16 +1,15 @@
-use crate::config::Config;
+use crate::config::{Config, GameConfig, MatchThemes};
 use crate::game::tetromino::Minos;
 use crate::scale::Scale;
 use crate::theme::nes::nes_theme;
 use crate::theme::snes::snes_theme;
 use crate::theme::Theme;
-use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::video::WindowContext;
 use std::time::Duration;
 use sdl2::ttf::Sdl2TtfContext;
-use crate::theme::modern::ModernTheme;
+use crate::theme::modern::modern_theme;
 
 const THEME_FADE_DURATION: Duration = Duration::from_millis(1000);
 const THEMES: usize = 4;
@@ -56,7 +55,7 @@ struct ThemedPlayer {
 }
 
 impl ThemedPlayer {
-    pub fn new(player: u32, theme: &dyn Theme, scale: Scale) -> Self {
+    pub fn new(player: u32, theme: &Theme, scale: Scale) -> Self {
         let (theme_width, theme_height) = theme.background_size();
         let mut bg_snip = scale.scale_rect(Rect::new(0, 0, theme_width, theme_height));
         bg_snip.center_on(scale.player_window(player).center());
@@ -70,7 +69,7 @@ impl ThemedPlayer {
 }
 
 pub struct ScaledTheme<'a> {
-    theme: Box<dyn Theme + 'a>,
+    theme: Theme<'a>,
     bg_source_snip: Rect,
     board_source_snip: Rect,
     player_themes: Vec<ThemedPlayer>,
@@ -78,14 +77,14 @@ pub struct ScaledTheme<'a> {
 }
 
 impl<'a> ScaledTheme<'a> {
-    fn new(theme: Box<dyn Theme + 'a>, players: u32, window_size: (u32, u32)) -> Self {
+    fn new(theme: Theme<'a>, players: u32, window_size: (u32, u32)) -> Self {
         let scale = Scale::new(players, theme.background_size(), window_size, theme.geometry().block_size());
         let (theme_width, theme_height) = theme.background_size();
         let bg_source_snip = Rect::new(0, 0, theme_width, theme_height);
         let board_rect = theme.board_snip();
         let board_source_snip = Rect::new(0, 0, board_rect.width(), board_rect.height());
         let player_themes = (0..players)
-            .map(|pid| ThemedPlayer::new(pid + 1, theme.as_ref(), scale))
+            .map(|pid| ThemedPlayer::new(pid + 1, &theme, scale))
             .collect::<Vec<ThemedPlayer>>();
         Self {
             theme,
@@ -123,7 +122,7 @@ impl<'a> ThemeContext<'a> {
         canvas: &mut WindowCanvas,
         texture_creator: &'a TextureCreator<WindowContext>,
         ttf: &'a Sdl2TtfContext,
-        players: u32,
+        game_config: GameConfig,
         window_size: (u32, u32),
         config: Config,
     ) -> Result<Self, String> {
@@ -132,10 +131,9 @@ impl<'a> ThemeContext<'a> {
             .theme
             .game_boy_palette
             .theme(canvas, texture_creator, config)?;
-        //let game_boy_green = GameBoyPalette::GreenSoup.theme(canvas, texture_creator, config)?;
         let nes = nes_theme(canvas, texture_creator, config)?;
         let snes = snes_theme(canvas, texture_creator, config)?;
-        let modern = ModernTheme::new(canvas, texture_creator, ttf, config, window_height)?;
+        let modern = modern_theme(canvas, texture_creator, ttf, config, window_height)?;
 
         let mut fade_buffer = texture_creator
             .create_texture_target(None, window_width, window_height)
@@ -143,11 +141,18 @@ impl<'a> ThemeContext<'a> {
         fade_buffer.set_blend_mode(BlendMode::Blend);
 
 
-        let themes: [Box<dyn Theme>; THEMES] = [Box::new(modern), Box::new(game_boy), Box::new(nes), Box::new(snes)];
+        let themes: [Theme; THEMES] = [game_boy, nes, snes, modern];
+        let current = match game_config.themes {
+            MatchThemes::All | MatchThemes::GameBoy => 0,
+            MatchThemes::Nes => 1,
+            MatchThemes::Snes => 2,
+            MatchThemes::Modern => 3
+        };
+
         Ok(Self {
-            current: 0,
+            current,
             themes: themes
-                .map(|theme| ScaledTheme::new(theme, players, window_size)),
+                .map(|theme| ScaledTheme::new(theme, game_config.players, window_size)),
             fade_buffer,
             fade_duration: None,
         })
@@ -170,12 +175,12 @@ impl<'a> ThemeContext<'a> {
         (width, height)
     }
 
-    pub fn theme_mut(&mut self) -> &mut dyn Theme {
-        self.themes[self.current].theme.as_mut()
+    pub fn theme_mut(&mut self) -> &mut Theme<'a> {
+        &mut self.themes[self.current].theme
     }
 
-    pub fn theme(&self) -> &dyn Theme {
-        self.themes[self.current].theme.as_ref()
+    pub fn theme(&self) -> &Theme<'a> {
+        &self.themes[self.current].theme
     }
 
     pub fn scale(&self) -> &Scale {

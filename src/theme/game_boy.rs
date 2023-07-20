@@ -3,7 +3,7 @@ use std::iter::Iterator;
 use crate::animation::destroy::DestroyAnimationType;
 use crate::animation::game_over::GameOverAnimationType;
 use crate::config::Config;
-use crate::theme::retro::{RetroTheme, RetroThemeOptions};
+use crate::theme::retro::{RetroThemeOptions, retro_theme};
 use serde::{Deserialize, Serialize};
 
 use sdl2::pixels::Color;
@@ -14,6 +14,7 @@ use crate::theme::font::{alpha_sprites, FontRenderOptions, MetricSnips};
 use crate::theme::geometry::VISIBLE_BUFFER;
 use crate::theme::sound::SoundThemeOptions;
 use crate::theme::sprite_sheet::TetrominoSpriteSheetMeta;
+use crate::theme::Theme;
 
 const ALPHA_PIXELS: u32 = 6;
 const BLOCK_PIXELS: u32 = 8;
@@ -141,8 +142,8 @@ impl GameBoyPalette {
         canvas: &mut WindowCanvas,
         texture_creator: &'a TextureCreator<WindowContext>,
         config: Config,
-    ) -> Result<RetroTheme<'a>, String> {
+    ) -> Result<Theme<'a>, String> {
         let options = game_boy_theme_options(self, config);
-        RetroTheme::new(canvas, texture_creator, options)
+        retro_theme(canvas, texture_creator, options)
     }
 }

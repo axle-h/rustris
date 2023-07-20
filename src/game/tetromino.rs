@@ -1,4 +1,3 @@
-use std::slice::Iter;
 use super::geometry::{Point, Rotation};
 use bitflags::{bitflags, Flags};
 

@@ -4,6 +4,7 @@ use crate::particles::geometry::{PointF, RectF};
 use crate::particles::source::{ParticleSource, ParticlePositionSource};
 
 const LATTICE_SCALE: usize = 5;
+const PERIMETER_SCALE: usize = 3;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Scale {
@@ -56,6 +57,29 @@ impl Scale {
         ParticlePositionSource::Lattice(points)
     }
 
+    pub fn perimeters(&self, rects: &[Rect]) -> ParticlePositionSource {
+        let points = rects.into_iter().flat_map(|r| self.perimeter_points(*r)).collect();
+        ParticlePositionSource::Lattice(points)
+    }
+
+    fn perimeter_points(&self, rect: Rect) -> Vec<PointF> {
+        let rows = max(rect.height() as usize / PERIMETER_SCALE, 3);
+        let cols = max(rect.width() as usize / PERIMETER_SCALE, 3);
+
+        let cell_width = (rect.width() as f64 / (cols - 1) as f64).round() as i32;
+        let cell_height = (rect.height() as f64 / (rows - 1) as f64).round() as i32;
+
+        let top_bottom = (0..cols)
+            .flat_map(|i| [rect.top(), rect.bottom()].into_iter()
+                .map(move |y| Point::new(rect.x() + i as i32 * cell_width, y)));
+        let left_right = (0..rows)
+            .flat_map(|j| [rect.left(), rect.right()].into_iter()
+                .map(move |x| Point::new(x, rect.y() + j as i32 * cell_height)));
+        top_bottom.chain(left_right)
+            .map(|p| self.point_to_particle_space(p))
+            .collect()
+    }
+
     fn lattice_points(&self, rect: Rect) -> Vec<PointF> {
         let rows = max(rect.height() as usize / LATTICE_SCALE, 3);
         let cols = max(rect.width() as usize / LATTICE_SCALE, 3);
@@ -68,7 +92,7 @@ impl Scale {
         (0..rows as i32)
             .flat_map(|j| (0..cols as i32).map(move |i| Point::new(rect.x() + i * cell_width, rect.y() + j * cell_height)))
             .map(|p| self.point_to_particle_space(p))
-            .collect::<Vec<PointF>>()
+            .collect()
     }
 }
 

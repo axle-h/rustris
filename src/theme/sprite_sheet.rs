@@ -1,14 +1,15 @@
-use std::cmp::{max, min};
 use std::collections::HashMap;
 use bitflags::Flags;
-use sdl2::gfx::primitives::DrawRenderer;
 use sdl2::image::LoadTexture;
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
 use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::video::WindowContext;
+use crate::game::block::BlockState;
+use crate::game::Game;
 use crate::game::geometry::Rotation;
-use crate::game::tetromino::{Corner, Minos, Perimeter, TetrominoShape};
+use crate::game::tetromino::{Corner, Perimeter, TetrominoShape};
+use crate::theme::geometry::{BoardGeometry, VISIBLE_BOARD_HEIGHT};
 
 struct TetrominoTexture<'a> {
     perimeter: Texture<'a>,
@@ -22,7 +23,7 @@ struct TetrominoTexture<'a> {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-enum MinoType {
+pub enum MinoType {
     Normal,
     Ghost,
     Stack,
@@ -346,8 +347,8 @@ impl<'a> TetrominoSpriteSheet<'a> {
 
     pub fn draw_tetromino_fill(&self, canvas: &mut WindowCanvas, shape: TetrominoShape, dest: Rect, max_scale: f64) -> Result<(), String> {
         let tetromino = self.tetrominos.get(&shape).unwrap();
-        let scale_x = (dest.width() as f64 / tetromino.width as f64);
-        let scale_y = (dest.height() as f64 / tetromino.height as f64);
+        let scale_x = dest.width() as f64 / tetromino.width as f64;
+        let scale_y = dest.height() as f64 / tetromino.height as f64;
         let scale = scale_x.min(scale_y).min(max_scale);
         let rect = Rect::from_center(
             dest.center(),
@@ -355,6 +356,30 @@ impl<'a> TetrominoSpriteSheet<'a> {
             (scale * tetromino.height as f64).round() as u32
         );
         canvas.copy(&tetromino.normal, None, rect)
+    }
+
+    pub fn draw_board(&self, canvas: &mut WindowCanvas, game: &Game, geometry: &BoardGeometry, ghost_type: MinoType) -> Result<(), String> {
+        for j in 0..VISIBLE_BOARD_HEIGHT {
+            for (i, block) in game.row(j).iter().copied().enumerate() {
+                let point = geometry.mino_point(i as u32, j);
+                match block {
+                    BlockState::Empty => {}
+                    BlockState::Tetromino(shape, rotation, mino_id) => {
+                        self.draw_mino(canvas, shape, rotation, mino_id, point)?;
+                    }
+                    BlockState::Ghost(shape, rotation, mino_id) => {
+                        self.draw(canvas, shape, rotation, mino_id, point, ghost_type)?;
+                    }
+                    BlockState::Stack(shape, rotation, mino_id) => {
+                        self.draw_stack(canvas, shape, rotation, mino_id, point)?;
+                    }
+                    BlockState::Garbage => {
+                        self.draw_garbage(canvas, point)?;
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     fn draw(&self, canvas: &mut WindowCanvas, shape: TetrominoShape, rotation: Rotation, mino_id: u32, dest: Point, mino_type: MinoType) -> Result<(), String> {

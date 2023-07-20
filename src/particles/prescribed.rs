@@ -23,7 +23,8 @@ pub enum PrescribedParticles {
     FadeInLatticeBurstAndFall { fade_in: Duration, color: Color },
     LightBurstUpAndOut { color: Color },
     BurstUp { color: Color },
-    BurstDown { color: Color }
+    BurstDown { color: Color },
+    PerimeterBurst { color: Color }
 }
 
 impl PrescribedParticles {
@@ -58,8 +59,14 @@ impl PrescribedParticles {
                     .with_color(ParticleColor::from_sdl(color))
                     .with_velocity((PointF::new(0.0, 0.1), PointF::new(0.2, 0.2)))
                     .with_fade_out((1.0, 0.1))
-                    .with_alpha((0.7, 0.3))
-
+                    .with_alpha((0.7, 0.3)),
+            PrescribedParticles::PerimeterBurst { color } =>
+                // TODO make these particles burst out somehow
+                ParticleSource::new(scale.perimeters(rects), ParticleModulation::Cascade)
+                    .with_color(ParticleColor::from_sdl(color))
+                    .with_velocity((PointF::new(0.0, 0.1), PointF::new(0.2, 0.2)))
+                    .with_fade_out((1.0, 0.1))
+                    .with_alpha((0.7, 0.3)),
         }
     }
 }

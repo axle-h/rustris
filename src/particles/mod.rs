@@ -26,19 +26,6 @@ struct Particle {
 }
 
 impl Particle {
-    fn new(source: &ParticleSource, position: PointF) -> Self {
-        let max_alpha = source.alpha().next();
-        Self {
-            position,
-            velocity: source.velocity().next(),
-            acceleration: source.acceleration().next(),
-            alpha: if source.fade_in().is_some() { 0.0 } else { max_alpha },
-            max_alpha,
-            color: source.color().next(),
-            time_to_live: if let Some(lifetime) = source.lifetime_secs() { Some(lifetime.next()) } else { None },
-        }
-    }
-
     /// checks if the particle is out of bounds (0-1) and trajectory will not bring it back
     fn is_escaped(&self) -> bool {
         (self.position.x() > 1.0 && self.velocity.x() >= 0.0 && self.acceleration.x() >= 0.0)
@@ -57,16 +44,6 @@ struct ParticleGroup {
 }
 
 impl ParticleGroup {
-    fn new(source: &ParticleSource, positions: Vec<PointF>) -> Self {
-        Self {
-            lifetime: 0.0,
-            anchor_for: source.anchor_for().map(|d| d.as_secs_f64()),
-            fade_in: source.fade_in().map(|d| d.as_secs_f64()),
-            fade_out: source.fade_out(),
-            particles: positions.into_iter().map(|p| Particle::new(source, p)).collect()
-        }
-    }
-
     fn remove_dead_particles(&mut self) {
         let mut to_remove = vec![];
         for (index, particle) in self.particles.iter().enumerate() {
@@ -180,10 +157,10 @@ impl Particles {
                 return;
             }
 
-            let positions = source.update(delta, max_particles as u32);
-            let group = ParticleGroup::new(source, positions);
-            max_particles -= group.len() as i32;
-            self.particles.push(group);
+            if let Some(group) = source.update(delta, max_particles as u32) {
+                max_particles -= group.len() as i32;
+                self.particles.push(group);
+            }
 
             if source.is_complete() {
                 to_remove.push(index);

@@ -185,7 +185,7 @@ impl<'a> SoundTheme<'a> {
                     play_sound(sound)
                 }
             },
-            GameEvent::GameOver(_) => play_sound(&self.game_over),
+            GameEvent::GameOver { .. } => play_sound(&self.game_over),
             GameEvent::Victory => play_sound(&self.victory),
             GameEvent::Paused => play_sound(&self.pause),
             GameEvent::HardDrop { .. } if self.hard_drop.is_some() => play_sound(self.hard_drop.as_ref().unwrap()),

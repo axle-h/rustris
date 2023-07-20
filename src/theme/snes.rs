@@ -1,7 +1,7 @@
 use crate::animation::destroy::DestroyAnimationType;
 use crate::animation::game_over::GameOverAnimationType;
 use crate::config::Config;
-use crate::theme::retro::{RetroTheme, RetroThemeOptions};
+use crate::theme::retro::{RetroThemeOptions, retro_theme};
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
 use sdl2::render::{TextureCreator, WindowCanvas};
@@ -10,6 +10,7 @@ use crate::theme::font::{alpha_sprites, FontRenderOptions, MetricSnips};
 use crate::theme::geometry::VISIBLE_BUFFER;
 use crate::theme::sound::SoundThemeOptions;
 use crate::theme::sprite_sheet::TetrominoSpriteSheetMeta;
+use crate::theme::Theme;
 
 const ALPHA_WIDTH: u32 = 7;
 const ALPHA_HEIGHT: u32 = 8;
@@ -28,7 +29,7 @@ pub fn snes_theme<'a>(
     canvas: &mut WindowCanvas,
     texture_creator: &'a TextureCreator<WindowContext>,
     config: Config,
-) -> Result<RetroTheme<'a>, String> {
+) -> Result<Theme<'a>, String> {
     let options = RetroThemeOptions::new(
         "snes",
         config,
@@ -96,5 +97,5 @@ pub fn snes_theme<'a>(
         GameOverAnimationType::CurtainDown,
         SoundThemeOptions::default("snes", config.audio)
     );
-    RetroTheme::new(canvas, texture_creator, options)
+    retro_theme(canvas, texture_creator, options)
 }

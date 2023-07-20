@@ -20,4 +20,6 @@ cargo build --release
 * particles
   * impact aurora (one big growing inverted alpha particle)
   * background
-  * level up
+  * victory
+* modern
+  * commas in numbers

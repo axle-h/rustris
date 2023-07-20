@@ -23,6 +23,7 @@ pub enum GameEvent {
     },
     Destroy(DestroyLines),
     Destroyed {
+        player: u32,
         lines: DestroyLines,
         send_garbage_lines: u32,
         level_up: bool,
@@ -30,7 +31,7 @@ pub enum GameEvent {
     Hold,
     Paused,
     UnPaused,
-    GameOver(GameOverCondition),
+    GameOver { player: u32, condition: GameOverCondition },
     Victory,
     Quit,
     NextTheme,

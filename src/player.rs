@@ -7,7 +7,7 @@ use crate::event::GameEvent;
 use crate::game::board::{compact_destroy_lines, DestroyLines};
 use crate::game::random::RandomTetromino;
 use crate::game::{Game, GameMetrics};
-use crate::high_score::table::{HighScore, HighScoreTable};
+use crate::high_score::table::HighScoreTable;
 use crate::high_score::NewHighScore;
 
 use rand::Rng;

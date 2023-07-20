@@ -21,7 +21,7 @@ extern crate sdl2;
 
 use crate::animation::game_over::GameOverAnimate;
 use crate::animation::hard_drop::HardDropAnimation;
-use crate::config::{Config, GameConfig, MatchRules, VideoMode};
+use crate::config::{Config, GameConfig, MatchRules, MatchThemes, VideoMode};
 use crate::event::{GameEvent, HighScoreEntryEvent};
 use crate::game_input::GameInputKey;
 use crate::high_score::table::HighScoreTable;
@@ -53,6 +53,7 @@ use crate::particles::source::{ParticleModulation, ParticlePositionSource, Parti
 use crate::paused::PausedScreen;
 
 const MAX_PLAYERS: u32 = 2;
+const MAX_PARTICLES_PER_PLAYER: usize = 10000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum MainMenuAction {
@@ -147,7 +148,7 @@ impl TetrisSdl {
 
     pub fn main_menu(&mut self, game_config: Option<GameConfig>) -> Result<Option<MainMenuAction>, String> {
         let mut game_config = match game_config {
-            None => GameConfig::new(1, 0, MatchRules::Battle),
+            None => GameConfig::new(1, 0, MatchRules::Battle, MatchThemes::All),
             Some(config) => config
         };
         let inputs = MenuInputContext::new(self.config.input);
@@ -157,6 +158,19 @@ impl TetrisSdl {
                 MenuAction::SelectList {
                     items: vec!["1", "2"],
                     current: game_config.players as usize - 1,
+                },
+            ),
+            (
+                "themes",
+                MenuAction::SelectList {
+                    items: vec!["all", "gameboy", "nes", "snes", "modern"],
+                    current: match game_config.themes {
+                        MatchThemes::All => 0,
+                        MatchThemes::GameBoy => 1,
+                        MatchThemes::Nes => 2,
+                        MatchThemes::Snes => 3,
+                        MatchThemes::Modern => 4
+                    },
                 },
             ),
             (
@@ -214,6 +228,16 @@ impl TetrisSdl {
                     None => {}
                     Some((name, action)) => match name {
                         "players" => game_config.players = action.parse::<u32>().unwrap(),
+                        "themes" => {
+                            game_config.themes = match action {
+                                "all" => MatchThemes::All,
+                                "gameboy" => MatchThemes::GameBoy,
+                                "nes" => MatchThemes::Nes,
+                                "snes" => MatchThemes::Snes,
+                                "modern" => MatchThemes::Modern,
+                                _ => unreachable!(),
+                            }
+                        },
                         "mode" => {
                             game_config.rules = match action {
                                 "battle" => MatchRules::Battle,
@@ -341,7 +365,7 @@ impl TetrisSdl {
             &mut self.canvas,
             &self.texture_creator,
             &self.ttf,
-            game_config.players,
+            game_config,
             window_size,
             self.config,
         )?;
@@ -369,7 +393,11 @@ impl TetrisSdl {
         }
 
         let particle_scale = particles::scale::Scale::new(window_size);
-        let mut particles = ParticleRender::new(Particles::new(10000), &self.texture_creator, particle_scale)?;
+        let mut particles = ParticleRender::new(
+            Particles::new(MAX_PARTICLES_PER_PLAYER * game_config.players as usize),
+            &self.texture_creator,
+            particle_scale
+        )?;
 
         themes.theme().music().play(-1)?;
         let paused_screen = PausedScreen::new(&mut self.canvas, &self.ttf, &self.texture_creator, window_size)?;
@@ -377,6 +405,7 @@ impl TetrisSdl {
         let mut player_hard_drop_animations: HashMap<u32, HardDropAnimation> = HashMap::new();
         let mut t0 = SystemTime::now();
         let mut max_level = 0;
+
         'game: loop {
             let now = SystemTime::now();
             let delta = now.duration_since(t0).map_err(|e| e.to_string())?;
@@ -508,7 +537,7 @@ impl TetrisSdl {
 
                         let event = event.unwrap();
                         match event {
-                            GameEvent::GameOver(_) => {
+                            GameEvent::GameOver { .. } => {
                                 new_game_over = Some(player.player);
                             }
                             GameEvent::Destroy(lines) => {
@@ -524,10 +553,10 @@ impl TetrisSdl {
                                 send_garbage_lines,
                                 ..
                             } => {
-                                if level_up {
+                                // if playing with all themes then the theme is auto switched after each level
+                                if game_config.themes == MatchThemes::All && level_up {
                                     let level = player.game.level();
                                     if level > max_level {
-                                        // todo option to disable this in config
                                         next_theme = true;
                                         max_level = level;
                                     }

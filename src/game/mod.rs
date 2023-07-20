@@ -299,7 +299,7 @@ impl Game {
             // cannot spawn a tetromino is a game over event
             (
                 GameState::GameOver,
-                Some(GameEvent::GameOver(GameOverCondition::BlockOut)),
+                Some(GameEvent::GameOver { player: self.player, condition: GameOverCondition::BlockOut }),
             )
         }
     }
@@ -359,7 +359,7 @@ impl Game {
             if is_lock_out {
                 (
                     GameState::GameOver,
-                    Some(GameEvent::GameOver(GameOverCondition::LockOut)),
+                    Some(GameEvent::GameOver { player: self.player, condition: GameOverCondition::LockOut }),
                 )
             } else {
                 (GameState::Pattern, Some(GameEvent::Lock {
@@ -382,10 +382,9 @@ impl Game {
 
     fn destroy(&mut self, lines: DestroyLines) -> (GameState, Option<GameEvent>) {
         self.board.destroy(lines);
-        let event = self.update_score_and_get_garbage_to_send(lines);
         (
             GameState::Spawn(Duration::ZERO, self.random.next()),
-            Some(event),
+            self.update_score_and_get_garbage_to_send(lines)
         )
     }
 
@@ -413,7 +412,7 @@ impl Game {
             // TopOut
             return (
                 GameState::GameOver,
-                Some(GameEvent::GameOver(GameOverCondition::TopOut)),
+                Some(GameEvent::GameOver { player: self.player, condition: GameOverCondition::TopOut }),
             );
         }
 
@@ -435,7 +434,7 @@ impl Game {
         }
     }
 
-    fn update_score_and_get_garbage_to_send(&mut self, pattern: DestroyLines) -> GameEvent {
+    fn update_score_and_get_garbage_to_send(&mut self, pattern: DestroyLines) -> Option<GameEvent> {
         // TODO test
         // todo t-spin
         // todo perfect clear
@@ -445,11 +444,7 @@ impl Game {
         let (action_score, action_difficult, garbage_lines) = match line_count {
             0 => {
                 self.combo = None;
-                return GameEvent::Destroyed {
-                    lines: pattern,
-                    send_garbage_lines: 0,
-                    level_up: false,
-                };
+                return None;
             }
             1 => (SINGLE_POINTS, false, 0),
             2 => (DOUBLE_POINTS, false, 1),
@@ -496,11 +491,12 @@ impl Game {
             self.level = line_level;
         }
 
-        GameEvent::Destroyed {
+        Some(GameEvent::Destroyed {
+            player: self.player,
             lines: pattern,
             send_garbage_lines: garbage_lines + difficult_garbage_lines,
             level_up,
-        }
+        })
     }
 
     pub fn row(&self, y: u32) -> &[BlockState] {

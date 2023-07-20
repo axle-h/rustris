@@ -2,6 +2,7 @@ use std::cmp::min;
 use std::time::Duration;
 use crate::particles::color::ParticleColor;
 use crate::particles::geometry::{PointF, RectF};
+use crate::particles::{Particle, ParticleGroup};
 use crate::particles::quantity::VariableQuantity;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -49,6 +50,8 @@ pub struct ParticleSource {
     alpha: VariableQuantity<f64>,
 }
 
+
+// todo trait this out so I can have an aggregate particle source
 impl ParticleSource {
     pub fn new(position_source: ParticlePositionSource, modulation: ParticleModulation) -> Self  {
         Self {
@@ -65,51 +68,44 @@ impl ParticleSource {
         }
     }
 
-    pub fn with_alpha<A : Into<VariableQuantity<f64>>>(&self, value: A) -> Self {
-        let mut result = self.clone();
-        result.alpha = value.into();
-        result
+    pub fn with_alpha<A : Into<VariableQuantity<f64>>>(mut self, value: A) -> Self {
+        self.alpha = value.into();
+        self
     }
 
 
-    pub fn with_color<C : Into<VariableQuantity<ParticleColor>>>(&self, value: C) -> Self {
-        let mut result = self.clone();
-        result.color = value.into();
-        result
+    pub fn with_color<C : Into<VariableQuantity<ParticleColor>>>(mut self, value: C) -> Self {
+        self.color = value.into();
+        self
     }
 
-    pub fn with_anchor(&self, value: Duration) -> Self {
-        let mut result = self.clone();
-        result.anchor_for = Some(value);
-        result
+    pub fn with_anchor(mut self, value: Duration) -> Self {
+        self.anchor_for = Some(value);
+        self
     }
 
-    pub fn with_fade_in(&self, value: Duration) -> Self {
-        let mut result = self.clone();
-        result.fade_in = Some(value);
-        result
+    pub fn with_fade_in(mut self, value: Duration) -> Self {
+        self.fade_in = Some(value);
+        self
     }
 
-    pub fn with_fade_out<L : Into<VariableQuantity<f64>>>(&self, value: L) -> Self {
-        let mut result = self.clone();
-        result.fade_out = true;
-        result.lifetime_secs = Some(value.into());
-        result
+    pub fn with_fade_out<L : Into<VariableQuantity<f64>>>(mut self, value: L) -> Self {
+        self.fade_out = true;
+        self.lifetime_secs = Some(value.into());
+        self
     }
 
-    pub fn with_velocity<V : Into<VariableQuantity<PointF>>>(&self, value: V) -> Self {
-        let mut result = self.clone();
-        result.velocity = value.into();
-        result
+    pub fn with_velocity<V : Into<VariableQuantity<PointF>>>(mut self, value: V) -> Self {
+        self.velocity = value.into();
+        self
     }
 
-    pub fn with_acceleration<A: Into<VariableQuantity<PointF>>>(&self, value: A) -> Self {
-        let mut result = self.clone();
-        result.acceleration = value.into();
-        result
+    pub fn with_acceleration<A: Into<VariableQuantity<PointF>>>(mut self, value: A) -> Self {
+        self.acceleration = value.into();
+        self
     }
 
-    pub fn with_gravity(&self, value: f64) -> Self {
+    pub fn with_gravity(mut self, value: f64) -> Self {
         self.with_acceleration(PointF::new(0.0, value))
     }
 
@@ -117,9 +113,9 @@ impl ParticleSource {
         self.state == ParticleSourceState::Complete
     }
 
-    pub fn update(&mut self, delta_time: Duration, max_particles: u32) -> Vec<PointF> {
+    pub fn update(&mut self, delta_time: Duration, max_particles: u32) -> Option<ParticleGroup> {
         if self.state == ParticleSourceState::Complete {
-            return vec![];
+            return None;
         }
         let emit_particles = match self.modulation {
             ParticleModulation::Cascade => self.cascade(max_particles),
@@ -127,13 +123,24 @@ impl ParticleSource {
             ParticleModulation::Constant { count, step } => self.constant(count, step, delta_time)
         }.min(max_particles);
 
-        if let ParticlePositionSource::Lattice(points) = &self.position_source {
-            return points.iter().take(emit_particles as usize).copied().collect()
+        if emit_particles == 0 {
+            return None;
         }
 
-        (0 .. emit_particles)
-            .map(|_| self.next_position())
-            .collect()
+        let particles = match &self.position_source {
+            ParticlePositionSource::Lattice(points) => points.iter().take(emit_particles as usize).copied().collect::<Vec<PointF>>(),
+            _ => (0..emit_particles).map(|_| self.next_position()).collect()
+        }.into_iter().map(|p| self.next_particle(p)).collect();
+
+        Some(
+            ParticleGroup {
+                lifetime: 0.0,
+                anchor_for: self.anchor_for.map(|d| d.as_secs_f64()),
+                fade_in: self.fade_in.map(|d| d.as_secs_f64()),
+                fade_out: self.fade_out,
+                particles
+            }
+        )
     }
 
     fn cascade(&mut self, count: u32) -> u32 {
@@ -170,61 +177,16 @@ impl ParticleSource {
         }
     }
 
-
-
-    pub fn anchor_for(&self) -> Option<Duration> {
-        self.anchor_for
+    fn next_particle(&self, position: PointF) -> Particle {
+        let max_alpha = self.alpha.next();
+        Particle {
+            position,
+            velocity: self.velocity.next(),
+            acceleration: self.acceleration.next(),
+            alpha: if self.fade_in.is_some() { 0.0 } else { max_alpha },
+            max_alpha,
+            color: self.color.next(),
+            time_to_live: if let Some(lifetime) = &self.lifetime_secs { Some(lifetime.next()) } else { None },
+        }
     }
-
-    pub fn fade_in(&self) -> Option<Duration> {
-        self.fade_in
-    }
-
-    pub fn fade_out(&self) -> bool {
-        self.fade_out
-    }
-
-    pub fn lifetime_secs(&self) -> &Option<VariableQuantity<f64>> {
-        &self.lifetime_secs
-    }
-
-    pub fn velocity(&self) -> &VariableQuantity<PointF> {
-        &self.velocity
-    }
-
-    pub fn acceleration(&self) -> &VariableQuantity<PointF> {
-        &self.acceleration
-    }
-
-    pub fn color(&self) -> &VariableQuantity<ParticleColor> {
-        &self.color
-    }
-
-    pub fn alpha(&self) -> &VariableQuantity<f64> {
-        &self.alpha
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // #[test]
-    // fn point_particle_source() {
-    //     let source = ParticlePositionSource::Static(PointF::new(10.0, 10.0)).build();
-    //     assert_eq!(source.next(), PointF::new(10.0, 10.0));
-    // }
-    //
-    // #[test]
-    // fn rect_particle_source() {
-    //     let bounds = RectF::new(10.0, 10.0, 100.0, 100.0);
-    //     let source = ParticlePositionSource::Rect(bounds).build();
-    //
-    //     let mut last_point = PointF::ZERO;
-    //     for _ in 1..10 {
-    //         let observed = source.next();
-    //         assert!(bounds.contains_point(observed));
-    //         assert_ne!(last_point, observed);
-    //     }
-    // }
 }

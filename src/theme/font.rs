@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use num_format::{Locale, ToFormattedString};
 use sdl2::image::LoadTexture;
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
@@ -187,12 +188,12 @@ impl<'a> FontRender<'a> {
     }
 
     fn render_number_left(&self, canvas: &mut WindowCanvas, value: u32, meta: MetricSnips) -> Result<(), String> {
-        let chars = format_number(value, meta.max_value, meta.to_zero_fill());
+        let chars = self.format_number(value, meta.max_value, meta.to_zero_fill());
         self.render_string(canvas, meta.point, &chars)
     }
 
     fn render_number_right(&self, canvas: &mut WindowCanvas, value: u32, meta: MetricSnips) -> Result<(), String> {
-        let chars = format_number(value, meta.max_value, None);
+        let chars = self.format_number(value, meta.max_value, None);
         let mut dest = meta.point;
         for ch in chars.chars().rev() {
             let snip = self.sprite(ch);
@@ -205,7 +206,7 @@ impl<'a> FontRender<'a> {
     }
 
     pub fn number_size(&self, value: u32) -> (u32, u32) {
-        let chars = format_number(value, u32::MAX, None);
+        let chars = self.format_number(value, u32::MAX, None);
         self.string_size(&chars)
     }
 
@@ -225,16 +226,20 @@ impl<'a> FontRender<'a> {
     fn sprite(&self, ch: char) -> Rect {
         *self.sprites.get(&ch).expect(&format!("{} is not supported by this font render", ch))
     }
-}
 
-fn format_number(value: u32, max_value: u32, zero_fill: Option<u32>) -> String {
-    let chars = format!("{}", value.min(max_value));
-    if let Some(max_chars) = zero_fill {
-        let fill_len = max_chars - chars.len() as u32;
-        let mut result: String = (0..fill_len).map(|_| '0').collect();
-        result.push_str(&chars);
-        result
-    } else {
-        chars
+    fn format_number(&self, value: u32, max_value: u32, zero_fill: Option<u32>) -> String {
+        let value = value.min(max_value);
+        let chars = if self.sprites.contains_key(&',') { value.to_formatted_string(&Locale::en) }
+        else { format!("{}", value) };
+        if let Some(max_chars) = zero_fill {
+            let fill_len = max_chars - chars.len() as u32;
+            let mut result: String = (0..fill_len).map(|_| '0').collect();
+            result.push_str(&chars);
+            result
+        } else {
+            chars
+        }
     }
 }
+
+

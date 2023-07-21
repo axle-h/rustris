@@ -6,7 +6,7 @@ use crate::game::tetromino::Minos;
 use crate::particles::color::ParticleColor;
 use crate::particles::geometry::PointF;
 use crate::particles::scale::Scale;
-use crate::particles::source::{ParticleModulation, ParticleSource};
+use crate::particles::source::{AggregateParticleSource, ParticleModulation, ParticleSource, RandomParticleSource};
 use crate::theme_context::ThemeContext;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -24,7 +24,8 @@ pub enum PrescribedParticles {
     LightBurstUpAndOut { color: Color },
     BurstUp { color: Color },
     BurstDown { color: Color },
-    PerimeterBurst { color: Color }
+    PerimeterBurst { color: Color },
+    PerimeterSpray { color: Color }
 }
 
 impl PrescribedParticles {
@@ -32,43 +33,69 @@ impl PrescribedParticles {
         PlayerTargetedParticles { player, target, particles: self }
     }
 
-    fn into_source(self, scale: &Scale, rects: &[Rect]) -> ParticleSource {
+    fn into_source(self, scale: &Scale, rects: &[Rect]) -> Box<dyn ParticleSource> {
         match self {
             PrescribedParticles::FadeInLatticeBurstAndFall { fade_in, color } =>
-                ParticleSource::new(scale.rect_lattice(rects), ParticleModulation::Cascade)
+                RandomParticleSource::new(scale.rect_lattice(rects), ParticleModulation::Cascade)
                     .with_color(ParticleColor::from_sdl(color))
                     .with_velocity((PointF::new(0.0, -0.4), PointF::new(0.1, 0.1)))
                     .with_gravity(1.5)
                     .with_anchor(fade_in)
                     .with_fade_in(fade_in)
-                    .with_alpha((0.9, 0.1)),
+                    .with_alpha((0.9, 0.1))
+                    .into_box(),
             PrescribedParticles::LightBurstUpAndOut { color } =>
-                ParticleSource::new(scale.rect_lattice(rects), ParticleModulation::Cascade)
-                    .with_color(ParticleColor::from_sdl(color))
-                    .with_velocity((PointF::new(0.0, -0.1), PointF::new(0.2, 0.2)))
-                    .with_fade_out((1.0, 0.1))
-                    .with_alpha((0.4, 0.1)),
+                RandomParticleSource::burst(
+                    scale.rect_lattice(rects),
+                    ParticleColor::from_sdl(color),
+                    (PointF::new(0.0, -0.1), PointF::new(0.2, 0.2)),
+                    (1.0, 0.1),
+                        (0.4, 0.1)
+                ).into_box(),
             PrescribedParticles::BurstUp { color } =>
-                ParticleSource::new(scale.rect_lattice(rects), ParticleModulation::Cascade)
-                    .with_color(ParticleColor::from_sdl(color))
-                    .with_velocity((PointF::new(0.0, -0.2), PointF::new(0.05, 0.1)))
-                    .with_fade_out((1.0, 0.1))
-                    .with_alpha((0.7, 0.3)),
+                RandomParticleSource::burst(
+                    scale.rect_lattice(rects),
+                    ParticleColor::from_sdl(color),
+                    (PointF::new(0.0, -0.2), PointF::new(0.05, 0.1)),
+                    (1.0, 0.1),
+                    (0.7, 0.3)
+                ).into_box(),
             PrescribedParticles::BurstDown { color } =>
-                ParticleSource::new(scale.rect_lattice(rects), ParticleModulation::Cascade)
-                    .with_color(ParticleColor::from_sdl(color))
-                    .with_velocity((PointF::new(0.0, 0.1), PointF::new(0.2, 0.2)))
-                    .with_fade_out((1.0, 0.1))
-                    .with_alpha((0.7, 0.3)),
-            PrescribedParticles::PerimeterBurst { color } =>
-                // TODO make these particles burst out somehow
-                ParticleSource::new(scale.perimeters(rects), ParticleModulation::Cascade)
-                    .with_color(ParticleColor::from_sdl(color))
-                    .with_velocity((PointF::new(0.0, 0.1), PointF::new(0.2, 0.2)))
-                    .with_fade_out((1.0, 0.1))
-                    .with_alpha((0.7, 0.3)),
+                RandomParticleSource::burst(
+                    scale.rect_lattice(rects),
+                    ParticleColor::from_sdl(color),
+                    (PointF::new(0.0, 0.2), PointF::new(0.1, 0.1)),
+                    (1.0, 0.1),
+                    (0.7, 0.3)
+                ).into_box(),
+            PrescribedParticles::PerimeterBurst { color } => {
+                let color = ParticleColor::from_sdl(color);
+                let sources = rects.into_iter().flat_map(|r| perimeter_sources(scale, *r, color)).collect();
+                AggregateParticleSource::new(sources).into_box()
+            },
+            PrescribedParticles::PerimeterSpray { color } => {
+                let color = ParticleColor::from_sdl(color);
+                let sources = rects.into_iter()
+                    .flat_map(|r| perimeter_sources(scale, *r, color))
+                    .map(|s| s.with_modulation(ParticleModulation::Constant { count: u32::MAX, step: Duration::from_millis(750) }))
+                    .collect();
+                AggregateParticleSource::new(sources).into_box()
+            },
         }
     }
+}
+
+fn perimeter_sources(scale: &Scale, rect: Rect, color: ParticleColor) -> [RandomParticleSource; 4] {
+    const V: f64 = 0.2;
+    const FADE_OUT: (f64, f64) = (1.0, 0.1);
+    const ALPHA: (f64, f64) = (0.7, 0.3);
+    let [top, right, bottom, left] = scale.perimeter_lattices(rect);
+    [
+        RandomParticleSource::burst(top, color, (PointF::new(0.0, -V), PointF::new(0.2, 0.1)), FADE_OUT, ALPHA),
+        RandomParticleSource::burst(right, color, (PointF::new(V, 0.0), PointF::new(0.1, 0.2)), FADE_OUT, ALPHA),
+        RandomParticleSource::burst(bottom, color, (PointF::new(0.0, V), PointF::new(0.2, 0.1)), FADE_OUT, ALPHA),
+        RandomParticleSource::burst(left, color, (PointF::new(-V, 0.0), PointF::new(0.1, 0.2)), FADE_OUT, ALPHA),
+    ]
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -79,7 +106,7 @@ pub struct PlayerTargetedParticles {
 }
 
 impl PlayerTargetedParticles {
-    pub fn into_source(self, themes: &ThemeContext, particle_scale: &Scale) -> ParticleSource {
+    pub fn into_source(self, themes: &ThemeContext, particle_scale: &Scale) -> Box<dyn ParticleSource> {
         let target_rects = match self.target {
             PlayerParticleTarget::DestroyedLines(lines) => compact_destroy_lines(lines)
                 .into_iter()

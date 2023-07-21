@@ -2,7 +2,7 @@ use std::cmp::min;
 use std::time::Duration;
 use crate::particles::color::ParticleColor;
 use crate::particles::geometry::{PointF, RectF};
-use crate::particles::{Particle, ParticleGroup};
+use crate::particles::particle::{Particle, ParticleGroup};
 use crate::particles::quantity::VariableQuantity;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -35,8 +35,13 @@ enum ParticleSourceState {
     Delay(Duration)
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct ParticleSource {
+pub trait ParticleSource {
+    fn is_complete(&self) -> bool;
+    fn update(&mut self, delta_time: Duration, max_particles: u32) -> Vec<ParticleGroup>;
+}
+
+#[derive(Debug, Clone)]
+pub struct RandomParticleSource {
     state: ParticleSourceState,
     position_source: ParticlePositionSource,
     modulation: ParticleModulation,
@@ -50,13 +55,48 @@ pub struct ParticleSource {
     alpha: VariableQuantity<f64>,
 }
 
+impl ParticleSource for RandomParticleSource {
+    fn is_complete(&self) -> bool {
+        self.state == ParticleSourceState::Complete
+    }
+
+    fn update(&mut self, delta_time: Duration, max_particles: u32) -> Vec<ParticleGroup> {
+        if self.state == ParticleSourceState::Complete {
+            return vec![];
+        }
+        let emit_particles = match self.modulation {
+            ParticleModulation::Cascade => self.cascade(max_particles),
+            ParticleModulation::CascadeLimit { count } => self.cascade(count),
+            ParticleModulation::Constant { count, step } => self.constant(count, step, delta_time)
+        }.min(max_particles);
+
+        if emit_particles == 0 {
+            return vec![];
+        }
+
+        let particles = match &self.position_source {
+            ParticlePositionSource::Lattice(points) => points.iter().take(emit_particles as usize).copied().collect::<Vec<PointF>>(),
+            _ => (0..emit_particles).map(|_| self.next_position()).collect()
+        }.into_iter().map(|p| self.next_particle(p)).collect();
+
+        vec![
+            ParticleGroup::new(
+                self.anchor_for.map(|d| d.as_secs_f64()),
+                self.fade_in.map(|d| d.as_secs_f64()),
+                self.fade_out,
+                particles
+            )
+        ]
+    }
+}
 
 // todo trait this out so I can have an aggregate particle source
-impl ParticleSource {
+impl RandomParticleSource {
     pub fn new(position_source: ParticlePositionSource, modulation: ParticleModulation) -> Self  {
         Self {
             state: ParticleSourceState::Emit,
-            position_source, modulation,
+            position_source,
+            modulation,
             anchor_for: None,
             fade_in: None,
             fade_out: false,
@@ -66,6 +106,41 @@ impl ParticleSource {
             color: VariableQuantity::new(ParticleColor::WHITE, ParticleColor::ZERO),
             alpha: VariableQuantity::new(1.0, 0.0)
         }
+    }
+
+    pub fn burst<C, V, L, A>(
+        position_source: ParticlePositionSource,
+        color: C,
+        velocity: V,
+        fade_out: L,
+        alpha: A
+    ) -> Self
+    where C : Into<VariableQuantity<ParticleColor>>,
+          V : Into<VariableQuantity<PointF>>,
+          L : Into<VariableQuantity<f64>>,
+          A : Into<VariableQuantity<f64>> {
+        Self {
+            state: ParticleSourceState::Emit,
+            position_source,
+            modulation: ParticleModulation::Cascade,
+            anchor_for: None,
+            fade_in: None,
+            fade_out: true,
+            lifetime_secs: Some(fade_out.into()),
+            velocity: velocity.into(),
+            acceleration: VariableQuantity::new(PointF::ZERO, PointF::ZERO),
+            color: color.into(),
+            alpha: alpha.into()
+        }
+    }
+
+    pub fn into_box(self) -> Box<dyn ParticleSource> {
+        Box::new(self)
+    }
+
+    pub fn with_modulation(mut self, modulation: ParticleModulation) -> Self {
+        self.modulation = modulation;
+        self
     }
 
     pub fn with_alpha<A : Into<VariableQuantity<f64>>>(mut self, value: A) -> Self {
@@ -109,40 +184,6 @@ impl ParticleSource {
         self.with_acceleration(PointF::new(0.0, value))
     }
 
-    pub fn is_complete(&self) -> bool {
-        self.state == ParticleSourceState::Complete
-    }
-
-    pub fn update(&mut self, delta_time: Duration, max_particles: u32) -> Option<ParticleGroup> {
-        if self.state == ParticleSourceState::Complete {
-            return None;
-        }
-        let emit_particles = match self.modulation {
-            ParticleModulation::Cascade => self.cascade(max_particles),
-            ParticleModulation::CascadeLimit { count } => self.cascade(count),
-            ParticleModulation::Constant { count, step } => self.constant(count, step, delta_time)
-        }.min(max_particles);
-
-        if emit_particles == 0 {
-            return None;
-        }
-
-        let particles = match &self.position_source {
-            ParticlePositionSource::Lattice(points) => points.iter().take(emit_particles as usize).copied().collect::<Vec<PointF>>(),
-            _ => (0..emit_particles).map(|_| self.next_position()).collect()
-        }.into_iter().map(|p| self.next_particle(p)).collect();
-
-        Some(
-            ParticleGroup {
-                lifetime: 0.0,
-                anchor_for: self.anchor_for.map(|d| d.as_secs_f64()),
-                fade_in: self.fade_in.map(|d| d.as_secs_f64()),
-                fade_out: self.fade_out,
-                particles
-            }
-        )
-    }
-
     fn cascade(&mut self, count: u32) -> u32 {
         self.state = ParticleSourceState::Complete;
         count
@@ -179,14 +220,51 @@ impl ParticleSource {
 
     fn next_particle(&self, position: PointF) -> Particle {
         let max_alpha = self.alpha.next();
-        Particle {
+        Particle::new(
             position,
-            velocity: self.velocity.next(),
-            acceleration: self.acceleration.next(),
-            alpha: if self.fade_in.is_some() { 0.0 } else { max_alpha },
+            self.velocity.next(),
+            self.acceleration.next(),
             max_alpha,
-            color: self.color.next(),
-            time_to_live: if let Some(lifetime) = &self.lifetime_secs { Some(lifetime.next()) } else { None },
+            if self.fade_in.is_some() { 0.0 } else { max_alpha },
+            self.color.next(),
+            if let Some(lifetime) = &self.lifetime_secs { Some(lifetime.next()) } else { None },
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AggregateParticleSource {
+    sources: Vec<RandomParticleSource>
+}
+
+impl AggregateParticleSource {
+    pub fn new(sources: Vec<RandomParticleSource>) -> Self {
+        Self { sources }
+    }
+
+    pub fn into_box(self) -> Box<dyn ParticleSource> {
+        Box::new(self)
+    }
+}
+
+impl ParticleSource for AggregateParticleSource {
+    fn is_complete(&self) -> bool {
+        self.sources.iter().all(|s| s.is_complete())
+    }
+
+    fn update(&mut self, delta_time: Duration, max_particles: u32) -> Vec<ParticleGroup> {
+        let mut result = vec![];
+        let mut max_particles = max_particles;
+        for source in self.sources.iter_mut() {
+            if max_particles == 0 {
+                break;
+            }
+            let groups = source.update(delta_time, max_particles);
+            for group in groups {
+                max_particles -= (group.len() as u32).min(max_particles);
+                result.push(group)
+            }
         }
+        return result;
     }
 }

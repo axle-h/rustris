@@ -32,7 +32,7 @@ pub enum GameEvent {
     Paused,
     UnPaused,
     GameOver { player: u32, condition: GameOverCondition },
-    Victory,
+    Victory { player: u32 },
     Quit,
     NextTheme,
     ReceivedGarbage {

@@ -209,9 +209,12 @@ impl<'a> Theme<'a> {
                     Some(particles.into_targeted(player, target))
                 }
                 GameEvent::Destroyed { player, level_up, .. } if level_up => {
-                    let target = PlayerParticleTarget::Board;
-                    let particles = PrescribedParticles::PerimeterBurst { color };
-                    Some(particles.into_targeted(player, target))
+                    Some(PrescribedParticles::PerimeterBurst { color }
+                        .into_targeted(player, PlayerParticleTarget::Board))
+                },
+                GameEvent::Victory { player } => {
+                    Some(PrescribedParticles::PerimeterSpray { color }
+                        .into_targeted(player, PlayerParticleTarget::Board))
                 }
                 _ => None
             }

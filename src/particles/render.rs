@@ -23,7 +23,7 @@ impl<'a> ParticleRender<'a> {
         Ok(Self { scale, particles, sphere_texture, sphere_size: (sphere_query.width, sphere_query.height) })
     }
 
-    pub fn add_source(&mut self, source: ParticleSource) {
+    pub fn add_source(&mut self, source: Box<dyn ParticleSource>) {
         self.particles.sources.push(source);
     }
 
@@ -37,17 +37,17 @@ impl<'a> ParticleRender<'a> {
         let sphere_height= sphere_height / 2;
 
         for particle in self.particles.particles() {
-            let point = self.scale.point_to_render_space(particle.position);
+            let point = self.scale.point_to_render_space(particle.position());
             let rect = Rect::new(
                 point.x() - sphere_width as i32 / 2,
                 point.y() - sphere_height as i32 / 2,
                 sphere_width,
                 sphere_height
             );
-            let (r, g, b): (u8, u8, u8) = particle.color.into();
+            let (r, g, b): (u8, u8, u8) = particle.color().into();
             self.sphere_texture.set_color_mod(r, g, b);
-            if particle.alpha < 1.0 {
-                self.sphere_texture.set_alpha_mod((255.0 * particle.alpha).round() as u8);
+            if particle.alpha() < 1.0 {
+                self.sphere_texture.set_alpha_mod((255.0 * particle.alpha()).round() as u8);
             } else {
                 self.sphere_texture.set_alpha_mod(255);
             }

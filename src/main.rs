@@ -53,7 +53,7 @@ use crate::particles::source::{ParticleModulation, ParticlePositionSource, Parti
 use crate::paused::PausedScreen;
 
 const MAX_PLAYERS: u32 = 2;
-const MAX_PARTICLES_PER_PLAYER: usize = 10000;
+const MAX_PARTICLES_PER_PLAYER: usize = 100000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum MainMenuAction {
@@ -578,7 +578,11 @@ impl TetrisSdl {
                     if let Some(winner) = fixture.check_for_winning_player() {
                         sdl2::mixer::Music::halt();
                         fixture.set_winner(winner, themes.theme().game_over_animation_type());
-                        themes.theme_mut().play_sound_effects(GameEvent::Victory)?;
+                        let victory = GameEvent::Victory { player: winner };
+                        themes.theme_mut().play_sound_effects(victory)?;
+                        if let Some(emit) = themes.theme().emit_particles(victory) {
+                            to_emit_particles.push(emit);
+                        }
                     } else if new_game_over.is_some() {
                         if let Some(loser) = new_game_over {
                             sdl2::mixer::Music::halt();
@@ -677,51 +681,6 @@ impl TetrisSdl {
 
         Ok(None)
     }
-
-    fn particle_demo(&mut self) -> Result<(), String> {
-        let particle_scale = particles::scale::Scale::new(self.canvas.window().size());
-        let mut particles = ParticleRender::new(Particles::new(1000), &self.texture_creator, particle_scale)?;
-
-        let (window_width, window_height) = self.canvas.window().size();
-        let rect = Rect::from_center((window_width as i32 / 2, window_height as i32 / 2), 200, 50);
-
-        particles.add_source(
-            ParticleSource::new(
-                particle_scale.rect_lattice(&[rect]),
-                ParticleModulation::Constant { count: 200, step: Duration::from_secs(3) }
-            ).with_velocity((PointF::new(0.0, -0.4), PointF::new(0.1, 0.1)))
-                .with_gravity(1.5)
-                .with_anchor(Duration::from_millis(500))
-                .with_fade_in(Duration::from_millis(500))
-        );
-
-        let mut inputs = GameInputContext::new(self.config.input);
-        let mut t0 = SystemTime::now();
-        'game: loop {
-            let now = SystemTime::now();
-            let delta = now.duration_since(t0).map_err(|e| e.to_string())?;
-            t0 = now;
-
-            for key in inputs.update(delta, self.event_pump.poll_iter()).into_iter() {
-                match key {
-                    GameInputKey::Quit => {
-                        break 'game
-                    }
-                    _ => {}
-                }
-            }
-
-            self.canvas.set_draw_color(Color::BLACK);
-            self.canvas.clear();
-
-            particles.update(delta);
-            particles.draw(&mut self.canvas)?;
-
-            self.canvas.present();
-        }
-
-        Ok(())
-    }
 }
 
 fn main() -> Result<(), String> {
@@ -743,7 +702,4 @@ fn main() -> Result<(), String> {
         }
     }
     Ok(())
-
-    // let mut tetris = TetrisSdl::new()?;
-    // tetris.particle_demo()
 }

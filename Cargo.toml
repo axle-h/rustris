@@ -25,6 +25,7 @@ build-info = { version = "0.0.31", default-features = false, features = [] }
 bitflags = "2.3.3"
 sdl2 = { version = "0.35", default-features = false, features = ["static-link","use-vcpkg","image","gfx","mixer","ttf"] }
 confy = { version = "0.5.1", default-features = false, features = ["yaml_conf"] }
+num-format = "0.4.4"
 
 [profile.release]
 strip = "symbols"

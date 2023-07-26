@@ -115,9 +115,10 @@ impl<'a> Menu<'a> {
             row_height * menu_items.len() as u32 + vertical_gutter * (menu_items.len() - 1) as u32;
         let body_width =
             caret_size + caret_gutter + max_name_width + horizontal_gutter + max_action_width;
-        let body_texture = texture_creator
+        let mut body_texture = texture_creator
             .create_texture_target(None, body_width, body_height)
             .map_err(|e| e.to_string())?;
+        body_texture.set_blend_mode(BlendMode::Blend);
 
         let watermark_font_size = font_size / 2;
         let watermark_font = FontType::Bold.load(ttf, watermark_font_size)?;
@@ -131,9 +132,10 @@ impl<'a> Menu<'a> {
             watermark_surface.width(),
             watermark_surface.height(),
         );
-        let watermark_texture = texture_creator
+        let mut watermark_texture = texture_creator
             .create_texture_from_surface(watermark_surface)
             .map_err(|e| e.to_string())?;
+        watermark_texture.set_blend_mode(BlendMode::Blend);
 
         let result = Self {
             menu_items,

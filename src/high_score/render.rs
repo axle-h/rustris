@@ -2,7 +2,7 @@ use crate::high_score::table::{HighScore, HighScoreTable};
 
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
-use sdl2::render::{Texture, TextureCreator, WindowCanvas};
+use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::ttf::{Font, GlyphMetrics, Sdl2TtfContext};
 use sdl2::video::WindowContext;
 use std::cmp::{max, min};
@@ -212,9 +212,10 @@ impl<'a, 'ttf> HighScoreRender<'a, 'ttf> {
         // all rows will be same height as the tallest row
         let row_height = rows.iter().map(|r| r.height()).max().unwrap();
         let height = n_rows * row_height + (n_rows - 1) * padding;
-        let texture = texture_creator
+        let mut texture = texture_creator
             .create_texture_target(None, width, height)
             .map_err(|e| e.to_string())?;
+        texture.set_blend_mode(BlendMode::Blend);
         let rect = Rect::from_center(
             Point::new(window_width as i32 / 2, window_height as i32 / 2),
             width,

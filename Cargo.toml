@@ -7,7 +7,7 @@ resolver = "2"
 
 [package.metadata.vcpkg]
 git = "https://github.com/microsoft/vcpkg"
-tag = "2023.04.15"
+tag = "2023.06.20"
 dependencies = ["sdl2", "sdl2-image", "sdl2-gfx", "sdl2-mixer", "sdl2-ttf"]
 
 [package.metadata.vcpkg.target]
@@ -26,6 +26,8 @@ bitflags = "2.3.3"
 sdl2 = { version = "0.35", default-features = false, features = ["static-link","use-vcpkg","image","gfx","mixer","ttf"] }
 confy = { version = "0.5.1", default-features = false, features = ["yaml_conf"] }
 num-format = "0.4.4"
+strum = "0.25"
+strum_macros = "0.25"
 
 [profile.release]
 strip = "symbols"

@@ -1,6 +1,6 @@
 use std::cmp::{max, min};
 use sdl2::rect::{Point, Rect};
-use crate::particles::geometry::{PointF, RectF};
+use crate::particles::geometry::{Vec2D, RectF};
 use crate::particles::source::{ParticleSource, ParticlePositionSource};
 
 const LATTICE_SCALE: usize = 5;
@@ -18,15 +18,15 @@ impl Scale {
         Self { window_width: window_width as f64, window_height: window_height as f64 }
     }
 
-    pub fn point_to_particle_space<P : Into<Point>>(&self, point: P) -> PointF {
+    pub fn point_to_particle_space<P : Into<Point>>(&self, point: P) -> Vec2D {
         let point = point.into();
-        PointF::new(
+        Vec2D::new(
             point.x() as f64 / self.window_width,
             point.y() as f64 / self.window_height
         )
     }
 
-    pub fn point_to_render_space<P : Into<PointF>>(&self, point: P) -> Point {
+    pub fn point_to_render_space<P : Into<Vec2D>>(&self, point: P) -> Point {
         let point = point.into();
         Point::new(
             (point.x() * self.window_width).round() as i32,
@@ -44,20 +44,20 @@ impl Scale {
         )
     }
 
-    pub fn static_particle_source_type<P : Into<Point>>(&self, point: P) -> ParticlePositionSource {
+    pub fn static_source<P : Into<Point>>(&self, point: P) -> ParticlePositionSource {
         ParticlePositionSource::Static(self.point_to_particle_space(point.into()))
     }
 
-    pub fn rect_particle_source_type<R : Into<Rect>>(&self, rect: R) -> ParticlePositionSource {
+    pub fn rect_source<R : Into<Rect>>(&self, rect: R) -> ParticlePositionSource {
         ParticlePositionSource::Rect(self.rect_to_particle_space(rect.into()))
     }
 
-    pub fn rect_lattice(&self, rects: &[Rect]) -> ParticlePositionSource {
+    pub fn rect_lattice_source(&self, rects: &[Rect]) -> ParticlePositionSource {
         let points = rects.into_iter().flat_map(|r| self.lattice_points(*r)).collect();
         ParticlePositionSource::Lattice(points)
     }
 
-    pub fn perimeter_lattices(&self, rect: Rect) -> [ParticlePositionSource; 4] {
+    pub fn perimeter_lattice_sources(&self, rect: Rect) -> [ParticlePositionSource; 4] {
         let rows = max(rect.height() as usize / PERIMETER_SCALE, 3);
         let cols = max(rect.width() as usize / PERIMETER_SCALE, 3);
 
@@ -78,7 +78,7 @@ impl Scale {
         )
     }
 
-    fn lattice_points(&self, rect: Rect) -> Vec<PointF> {
+    fn lattice_points(&self, rect: Rect) -> Vec<Vec2D> {
         let rows = max(rect.height() as usize / LATTICE_SCALE, 3);
         let cols = max(rect.width() as usize / LATTICE_SCALE, 3);
 
@@ -102,7 +102,7 @@ mod tests {
     fn point_render_to_particle_space() {
         let scale = Scale::new((1920, 1080));
         let observed = scale.point_to_particle_space((480, 540));
-        assert_eq!(observed, PointF::new(0.25, 0.5))
+        assert_eq!(observed, Vec2D::new(0.25, 0.5))
     }
 
     #[test]

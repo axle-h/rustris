@@ -1,7 +1,7 @@
-use std::ops::{Add, AddAssign, Mul};
+use std::ops::{Add, AddAssign, Mul, Sub};
 
 #[derive(Clone, Copy, Debug)]
-pub struct PointF {
+pub struct Vec2D {
     x: f64,
     y: f64
 }
@@ -26,12 +26,12 @@ macro_rules! approx_0 {
     }};
 }
 
-impl PointF {
+impl Vec2D {
     pub const fn new(x: f64, y: f64) -> Self {
         Self { x, y }
     }
 
-    pub const ZERO: PointF = PointF::new(0.0, 0.0);
+    pub const ZERO: Vec2D = Vec2D::new(0.0, 0.0);
 
     pub fn x(&self) -> f64 {
         self.x
@@ -42,30 +42,29 @@ impl PointF {
     }
 
     pub fn is_zero(&self) -> bool {
-        self == &PointF::ZERO
+        self == &Vec2D::ZERO
     }
 
-    pub fn normalize(&self) -> Self {
+    pub fn unit_vector(&self) -> Self {
         if self.is_zero() {
             return self.clone();
         }
 
-        let n = self.x * self.x + self.y * self.y;
+        let n = self.x.powi(2) + self.y.powi(2);
         if approx_eq!(n, 1.0) {
             // already normalized.
             return self.clone();
         }
         let n = n.sqrt();
-        if approx_0!(n) {
-            // risking overflow, back to origin
-            return PointF::ZERO;
-        }
-        let n = 1.0 / n;
-        Self::new(self.x * n, self.y * n)
+        Self::new(self.x / n, self.y / n)
+    }
+
+    pub fn magnitude_squared(&self) -> f64 {
+        self.x().powi(2) + self.y().powi(2)
     }
 }
 
-impl PartialEq for PointF {
+impl PartialEq for Vec2D {
     fn eq(&self, other: &Self) -> bool {
         approx_eq!(self.x, other.x) && approx_eq!(self.y, other.y)
     }
@@ -75,44 +74,44 @@ impl PartialEq for PointF {
     }
 }
 
-impl Add for PointF {
-    type Output = PointF;
+impl Add for Vec2D {
+    type Output = Vec2D;
 
     fn add(self, rhs: Self) -> Self::Output {
-        PointF::new(self.x + rhs.x, self.y + rhs.y)
+        Vec2D::new(self.x + rhs.x, self.y + rhs.y)
     }
 }
 
-impl AddAssign for PointF {
+impl AddAssign for Vec2D {
     fn add_assign(&mut self, rhs: Self) {
         self.x += rhs.x;
         self.y += rhs.y;
     }
 }
 
-impl Mul<f64> for PointF {
-    type Output = PointF;
+impl Mul<f64> for Vec2D {
+    type Output = Vec2D;
 
     fn mul(self, rhs: f64) -> Self::Output {
-        PointF::new(self.x * rhs, self.y * rhs)
+        Vec2D::new(self.x * rhs, self.y * rhs)
     }
 }
 
-impl Mul<PointF> for PointF {
-    type Output = PointF;
+impl Sub for Vec2D {
+    type Output = Vec2D;
 
-    fn mul(self, rhs: PointF) -> Self::Output {
-        PointF::new(self.x * rhs.x, self.y * rhs.y)
+    fn sub(self, rhs: Self) -> Self::Output {
+        Vec2D::new(self.x - rhs.x, self.y - rhs.y)
     }
 }
 
-impl From<(f64, f64)> for PointF {
-    fn from((x, y): (f64, f64)) -> PointF {
-        PointF::new(x, y)
+impl From<(f64, f64)> for Vec2D {
+    fn from((x, y): (f64, f64)) -> Vec2D {
+        Vec2D::new(x, y)
     }
 }
 
-impl Into<(f64, f64)> for PointF {
+impl Into<(f64, f64)> for Vec2D {
     fn into(self) -> (f64, f64) {
         (self.x, self.y)
     }
@@ -169,7 +168,7 @@ impl RectF {
         self.y + self.height
     }
 
-    pub fn contains_point<P : Into<PointF>>(&self, point: P) -> bool {
+    pub fn contains_point<P : Into<Vec2D>>(&self, point: P) -> bool {
         let point = point.into();
         let (x, y) = point.into();
         let inside_x = x >= self.left() && x < self.right();
@@ -189,20 +188,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn origin_normalizes_to_origin() {
-        assert_eq!(PointF::ZERO.normalize(), PointF::ZERO);
+    fn unit_vector_of_zero_is_zero() {
+        assert_eq!(Vec2D::ZERO.unit_vector(), Vec2D::ZERO);
     }
 
     #[test]
-    fn normalized_point_normalizes_to_same_point() {
-        let point = PointF::new(FRAC_1_SQRT_2, FRAC_1_SQRT_2);
-        assert_eq!(point.normalize(), point);
+    fn unit_vector_of_unit_vector_is_equal() {
+        let point = Vec2D::new(FRAC_1_SQRT_2, FRAC_1_SQRT_2);
+        assert_eq!(point.unit_vector(), point);
     }
 
     #[test]
-    fn normalize_point() {
-        let normal = PointF::new(123.456, 789.0).normalize();
-        assert_eq!(normal, PointF::new(0.15459048205347672, 0.9879786348188272));
+    fn unit_vector() {
+        let normal = Vec2D::new(123.456, 789.0).unit_vector();
+        assert_eq!(normal, Vec2D::new(0.15459048205347672, 0.9879786348188272));
     }
 
     #[test]

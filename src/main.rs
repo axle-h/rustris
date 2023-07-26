@@ -16,6 +16,7 @@ mod theme_context;
 mod particles;
 mod font;
 mod paused;
+mod frame_rate;
 
 extern crate sdl2;
 
@@ -45,15 +46,19 @@ use std::fmt::Debug;
 use std::time::{Duration, SystemTime};
 use sdl2::rect::Rect;
 use theme_context::{PlayerTextures, TextureMode, ThemeContext};
+use crate::frame_rate::FrameRate;
 use crate::high_score::NewHighScore;
-use crate::particles::geometry::PointF;
+use crate::particles::geometry::Vec2D;
 use crate::particles::Particles;
+use crate::particles::prescribed::PrescribedParticles;
 use crate::particles::render::ParticleRender;
 use crate::particles::source::{ParticleModulation, ParticlePositionSource, ParticleSource};
 use crate::paused::PausedScreen;
+use crate::theme::sound::{load_sound, play_sound};
 
 const MAX_PLAYERS: u32 = 2;
 const MAX_PARTICLES_PER_PLAYER: usize = 100000;
+const MAX_BACKGROUND_PARTICLES: usize = 100000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum MainMenuAction {
@@ -69,7 +74,8 @@ struct TetrisSdl {
     canvas: WindowCanvas,
     event_pump: EventPump,
     _audio: AudioSubsystem,
-    texture_creator: TextureCreator<WindowContext>
+    texture_creator: TextureCreator<WindowContext>,
+    particle_scale: particles::scale::Scale
 }
 
 impl TetrisSdl {
@@ -143,7 +149,14 @@ impl TetrisSdl {
             event_pump,
             _audio: audio,
             texture_creator,
+            particle_scale: particles::scale::Scale::new((width, height))
         })
+    }
+
+    fn orbit_particle_source(&self) -> Box<dyn ParticleSource> {
+        let (window_width, window_height) = self.canvas.window().size();
+        PrescribedParticles::Orbit { color: Color::WHITE }
+            .into_source(&self.particle_scale, &[Rect::new(0, 0, window_width, window_height)])
     }
 
     pub fn main_menu(&mut self, game_config: Option<GameConfig>) -> Result<Option<MainMenuAction>, String> {
@@ -209,9 +222,20 @@ impl TetrisSdl {
             self.canvas.window().size(),
         )?;
 
+        let mut particles = ParticleRender::new(
+            Particles::new(MAX_BACKGROUND_PARTICLES),
+            &self.texture_creator,
+            self.particle_scale
+        )?;
+        particles.add_source(self.orbit_particle_source());
+
+        let mut frame_rate = FrameRate::new();
+
         let music = sdl2::mixer::Music::from_file("resource/menu/main-menu.ogg")?;
         music.play(-1)?;
         'menu: loop {
+            let delta = frame_rate.update()?;
+
             let events = inputs.parse(self.event_pump.poll_iter());
             if events.contains(&MenuInputKey::Quit) {
                 return Ok(None);
@@ -259,6 +283,11 @@ impl TetrisSdl {
             self.canvas.set_draw_color(Color::BLACK);
             self.canvas.clear();
 
+            // particles
+            particles.update(delta);
+            particles.draw(&mut self.canvas)?;
+
+            // menu
             menu.draw(&mut self.canvas)?;
 
             self.canvas.present();
@@ -283,9 +312,20 @@ impl TetrisSdl {
             None
         )?;
 
+        let mut particles = ParticleRender::new(
+            Particles::new(MAX_BACKGROUND_PARTICLES),
+            &self.texture_creator,
+            self.particle_scale
+        )?;
+        particles.add_source(self.orbit_particle_source());
+
+        let mut frame_rate = FrameRate::new();
+
         let music = sdl2::mixer::Music::from_file("resource/menu/high-score.ogg")?;
         music.play(-1)?;
         'menu: loop {
+            let delta = frame_rate.update()?;
+
             let events = inputs.parse(self.event_pump.poll_iter());
             if !events.is_empty() {
                 // any button press
@@ -293,6 +333,10 @@ impl TetrisSdl {
             }
             self.canvas.set_draw_color(Color::BLACK);
             self.canvas.clear();
+
+            // particles
+            particles.update(delta);
+            particles.draw(&mut self.canvas)?;
 
             view.draw(&mut self.canvas)?;
 
@@ -315,9 +359,22 @@ impl TetrisSdl {
             self.canvas.window().size(),
             Some(new_high_score)
         )?;
+
+        let mut particles = ParticleRender::new(
+            Particles::new(MAX_BACKGROUND_PARTICLES),
+            &self.texture_creator,
+            self.particle_scale
+        )?;
+        particles.add_source(self.orbit_particle_source());
+
+        let mut frame_rate = FrameRate::new();
+
         let music = sdl2::mixer::Music::from_file("resource/menu/high-score.ogg")?;
+        let sound = load_sound("menu", "chime", self.config)?;
         music.play(-1)?;
         'menu: loop {
+            let delta = frame_rate.update()?;
+
             for key in inputs.parse(self.event_pump.poll_iter()) {
                 let event = match key {
                     MenuInputKey::Up => table.up(),
@@ -331,17 +388,18 @@ impl TetrisSdl {
                 if event.is_none() {
                     continue;
                 }
-                // TODO play a sound on cursor move
                 match event.unwrap() {
-                    HighScoreEntryEvent::CursorRight => {}
-                    HighScoreEntryEvent::CursorLeft => {}
-                    HighScoreEntryEvent::ChangeChar => {}
                     HighScoreEntryEvent::Finished => break 'menu,
+                    _ => play_sound(&sound)?
                 }
             };
 
             self.canvas.set_draw_color(Color::BLACK);
             self.canvas.clear();
+
+            // particles
+            particles.update(delta);
+            particles.draw(&mut self.canvas)?;
 
             table.draw(&mut self.canvas)?;
 
@@ -392,24 +450,28 @@ impl TetrisSdl {
             texture_refs.push((&mut textures.board, TextureMode::PlayerBoard(player)));
         }
 
-        let particle_scale = particles::scale::Scale::new(window_size);
         let mut particles = ParticleRender::new(
             Particles::new(MAX_PARTICLES_PER_PLAYER * game_config.players as usize),
             &self.texture_creator,
-            particle_scale
+            self.particle_scale
         )?;
+
+        let mut bg_particles = ParticleRender::new(
+            Particles::new(MAX_BACKGROUND_PARTICLES),
+            &self.texture_creator,
+            self.particle_scale
+        )?;
+        bg_particles.add_source(self.orbit_particle_source());
 
         themes.theme().music().play(-1)?;
         let paused_screen = PausedScreen::new(&mut self.canvas, &self.ttf, &self.texture_creator, window_size)?;
 
         let mut player_hard_drop_animations: HashMap<u32, HardDropAnimation> = HashMap::new();
-        let mut t0 = SystemTime::now();
         let mut max_level = 0;
+        let mut frame_rate = FrameRate::new();
 
         'game: loop {
-            let now = SystemTime::now();
-            let delta = now.duration_since(t0).map_err(|e| e.to_string())?;
-            t0 = now;
+            let delta = frame_rate.update()?;
 
             let mut to_emit_particles = vec![];
 
@@ -607,10 +669,29 @@ impl TetrisSdl {
                 _ => {}
             }
 
-            // draw the game
+            // update particles
+            if !fixture.state().is_paused() {
+                particles.update(delta);
+
+                if themes.render_bg_particles() {
+                    bg_particles.update(delta);
+                }
+            }
+            for emit in to_emit_particles.into_iter() {
+                particles.add_source(emit.into_source(&themes, &self.particle_scale));
+            }
+
+            // clear
             self.canvas
                 .set_draw_color(themes.theme().background_color());
             self.canvas.clear();
+
+            // draw bg particles
+            if themes.render_bg_particles() {
+                bg_particles.draw(&mut self.canvas)?;
+            }
+
+            // draw the game
             self.canvas
                 .with_multiple_texture_canvas(
                     texture_refs.iter(),
@@ -651,14 +732,7 @@ impl TetrisSdl {
             themes.draw_current(&mut self.canvas, &mut texture_refs, delta, offsets)?;
 
 
-            // particles
-            for emit in to_emit_particles.into_iter() {
-                particles.add_source(emit.into_source(&themes, &particle_scale));
-            }
-
-            if !fixture.state().is_paused() {
-                particles.update(delta);
-            }
+            // fg particles
             particles.draw(&mut self.canvas)?;
 
             let mut remove_hard_drop_animations: Vec<u32> = vec![];

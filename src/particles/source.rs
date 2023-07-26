@@ -1,19 +1,23 @@
 use std::cmp::min;
 use std::time::Duration;
+use rand::{Rng, thread_rng};
+use rand::rngs::ThreadRng;
+use sdl2::pixels::Color;
 use crate::particles::color::ParticleColor;
-use crate::particles::geometry::{PointF, RectF};
-use crate::particles::particle::{Particle, ParticleGroup};
-use crate::particles::quantity::VariableQuantity;
+use crate::particles::geometry::{Vec2D, RectF};
+use crate::particles::meta::ParticleSprite;
+use crate::particles::particle::{Particle, ParticleGroup, ParticleWave};
+use crate::particles::quantity::{ProbabilityTable, VariableQuantity};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ParticlePositionSource {
     /// All particles are emitted from one point
-    Static(PointF),
+    Static(Vec2D),
 
     /// Emitted randomly within a rectangle
     Rect(RectF),
 
-    Lattice(Vec<PointF>)
+    Lattice(Vec<Vec2D>)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -35,6 +39,41 @@ enum ParticleSourceState {
     Delay(Duration)
 }
 
+#[derive(Debug, Clone)]
+pub struct ParticleProperties {
+    rng: ThreadRng,
+    sprites: Vec<ParticleSprite>,
+    color: VariableQuantity<ParticleColor>,
+    size: VariableQuantity<f64>,
+}
+
+impl ParticleProperties {
+    pub fn new<C, S>(sprites: &[ParticleSprite], color: C, size: S) -> Self
+    where C : Into<VariableQuantity<ParticleColor>>,
+          S : Into<VariableQuantity<f64>> {
+        assert!(!sprites.is_empty());
+        Self { rng: thread_rng(), sprites: sprites.to_vec(), color: color.into(), size: size.into() }
+    }
+
+    pub fn default() -> Self {
+        Self {
+            rng: thread_rng(),
+            sprites: vec![ParticleSprite::Circle05],
+            color: VariableQuantity::new(ParticleColor::WHITE, ParticleColor::ZERO),
+            size: VariableQuantity::new(1.0, 0.0)
+        }
+    }
+
+    pub fn next_sprite(&mut self) -> &ParticleSprite {
+        if self.sprites.len() == 1 {
+            self.sprites.first()
+        } else {
+            let index = self.rng.gen_range(0..self.sprites.len());
+            self.sprites.get(index)
+        }.unwrap()
+    }
+}
+
 pub trait ParticleSource {
     fn is_complete(&self) -> bool;
     fn update(&mut self, delta_time: Duration, max_particles: u32) -> Vec<ParticleGroup>;
@@ -48,11 +87,13 @@ pub struct RandomParticleSource {
     anchor_for: Option<Duration>,
     fade_in: Option<Duration>,
     fade_out: bool,
+    pulse: Option<VariableQuantity<ParticleWave>>,
     lifetime_secs: Option<VariableQuantity<f64>>,
-    velocity: VariableQuantity<PointF>,
-    acceleration: VariableQuantity<PointF>,
-    color: VariableQuantity<ParticleColor>,
+    velocity: VariableQuantity<Vec2D>,
+    acceleration: VariableQuantity<Vec2D>,
     alpha: VariableQuantity<f64>,
+    orbit: Option<Vec2D>,
+    properties: ProbabilityTable<ParticleProperties>
 }
 
 impl ParticleSource for RandomParticleSource {
@@ -75,7 +116,7 @@ impl ParticleSource for RandomParticleSource {
         }
 
         let particles = match &self.position_source {
-            ParticlePositionSource::Lattice(points) => points.iter().take(emit_particles as usize).copied().collect::<Vec<PointF>>(),
+            ParticlePositionSource::Lattice(points) => points.iter().take(emit_particles as usize).copied().collect::<Vec<Vec2D>>(),
             _ => (0..emit_particles).map(|_| self.next_position()).collect()
         }.into_iter().map(|p| self.next_particle(p)).collect();
 
@@ -84,7 +125,8 @@ impl ParticleSource for RandomParticleSource {
                 self.anchor_for.map(|d| d.as_secs_f64()),
                 self.fade_in.map(|d| d.as_secs_f64()),
                 self.fade_out,
-                particles
+                self.orbit,
+                particles,
             )
         ]
     }
@@ -100,23 +142,26 @@ impl RandomParticleSource {
             anchor_for: None,
             fade_in: None,
             fade_out: false,
+            pulse: None,
             lifetime_secs: None,
-            velocity: VariableQuantity::new(PointF::ZERO, PointF::ZERO),
-            acceleration: VariableQuantity::new(PointF::ZERO, PointF::ZERO),
-            color: VariableQuantity::new(ParticleColor::WHITE, ParticleColor::ZERO),
-            alpha: VariableQuantity::new(1.0, 0.0)
+            velocity: VariableQuantity::new(Vec2D::ZERO, Vec2D::ZERO),
+            acceleration: VariableQuantity::new(Vec2D::ZERO, Vec2D::ZERO),
+            alpha: VariableQuantity::new(1.0, 0.0),
+            orbit: None,
+            properties: ProbabilityTable::identity(ParticleProperties::default()),
         }
     }
 
     pub fn burst<C, V, L, A>(
         position_source: ParticlePositionSource,
+        sprite: ParticleSprite,
         color: C,
         velocity: V,
         fade_out: L,
         alpha: A
     ) -> Self
     where C : Into<VariableQuantity<ParticleColor>>,
-          V : Into<VariableQuantity<PointF>>,
+          V : Into<VariableQuantity<Vec2D>>,
           L : Into<VariableQuantity<f64>>,
           A : Into<VariableQuantity<f64>> {
         Self {
@@ -126,11 +171,13 @@ impl RandomParticleSource {
             anchor_for: None,
             fade_in: None,
             fade_out: true,
+            pulse: None,
             lifetime_secs: Some(fade_out.into()),
             velocity: velocity.into(),
-            acceleration: VariableQuantity::new(PointF::ZERO, PointF::ZERO),
-            color: color.into(),
-            alpha: alpha.into()
+            acceleration: VariableQuantity::new(Vec2D::ZERO, Vec2D::ZERO),
+            alpha: alpha.into(),
+            orbit: None,
+            properties: ProbabilityTable::identity(ParticleProperties::new(&[sprite], color, 1.0))
         }
     }
 
@@ -148,9 +195,19 @@ impl RandomParticleSource {
         self
     }
 
+    pub fn with_static_properties<C, S>(
+        mut self,
+        sprite: ParticleSprite,
+        color: C,
+        size: S
+    ) -> Self
+    where C : Into<VariableQuantity<ParticleColor>>,
+          S : Into<VariableQuantity<f64>> {
+        self.with_properties(ProbabilityTable::identity(ParticleProperties::new(&[sprite], color, size)))
+    }
 
-    pub fn with_color<C : Into<VariableQuantity<ParticleColor>>>(mut self, value: C) -> Self {
-        self.color = value.into();
+    pub fn with_properties(mut self, properties: ProbabilityTable<ParticleProperties>) -> Self {
+        self.properties = properties;
         self
     }
 
@@ -170,18 +227,24 @@ impl RandomParticleSource {
         self
     }
 
-    pub fn with_velocity<V : Into<VariableQuantity<PointF>>>(mut self, value: V) -> Self {
+    pub fn with_velocity<V : Into<VariableQuantity<Vec2D>>>(mut self, value: V) -> Self {
         self.velocity = value.into();
         self
     }
 
-    pub fn with_acceleration<A: Into<VariableQuantity<PointF>>>(mut self, value: A) -> Self {
+    pub fn with_acceleration<A: Into<VariableQuantity<Vec2D>>>(mut self, value: A) -> Self {
         self.acceleration = value.into();
         self
     }
 
-    pub fn with_gravity(mut self, value: f64) -> Self {
-        self.with_acceleration(PointF::new(0.0, value))
+    pub fn with_orbit<O : Into<Vec2D>>(mut self, value: O) -> Self {
+        self.orbit = Some(value.into());
+        self
+    }
+
+    pub fn with_pulse<P : Into<VariableQuantity<ParticleWave>>>(mut self, value: P) -> Self {
+        self.pulse = Some(value.into());
+        self
     }
 
     fn cascade(&mut self, count: u32) -> u32 {
@@ -206,28 +269,32 @@ impl RandomParticleSource {
         }
     }
 
-    fn next_position(&self) -> PointF {
+    fn next_position(&self) -> Vec2D {
         match self.position_source {
             ParticlePositionSource::Static(point) => point,
             ParticlePositionSource::Rect(rect) => {
                 let x = rect.x() + rect.width() * rand::random::<f64>();
                 let y = rect.y() + rect.height() * rand::random::<f64>();
-                PointF::new(x, y)
+                Vec2D::new(x, y)
             },
             _ => unreachable!()
         }
     }
 
-    fn next_particle(&self, position: PointF) -> Particle {
+    fn next_particle(&mut self, position: Vec2D) -> Particle {
         let max_alpha = self.alpha.next();
+        let mut properties = self.properties.next_mut();
         Particle::new(
             position,
             self.velocity.next(),
             self.acceleration.next(),
             max_alpha,
             if self.fade_in.is_some() { 0.0 } else { max_alpha },
-            self.color.next(),
-            if let Some(lifetime) = &self.lifetime_secs { Some(lifetime.next()) } else { None },
+            self.pulse.as_mut().map(|p| p.next()),
+            properties.color.next(),
+            self.lifetime_secs.as_mut().map(|l| l.next()),
+            *properties.next_sprite(),
+            properties.size.next(),
         )
     }
 }

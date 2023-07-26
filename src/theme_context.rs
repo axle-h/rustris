@@ -236,6 +236,10 @@ impl<'a> ThemeContext<'a> {
         self.fade_duration.is_some()
     }
 
+    pub fn render_bg_particles(&self) -> bool {
+        self.current().theme.particle_color().is_some()
+    }
+
     pub fn draw_current(
         &mut self,
         canvas: &mut WindowCanvas,

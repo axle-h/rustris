@@ -19,4 +19,4 @@ cargo build --release
 * game boy color theme
 * particles
   * impact aurora (one big growing inverted alpha particle)
-  * background
+  * winner gets spray

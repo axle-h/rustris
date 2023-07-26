@@ -3,7 +3,7 @@ use std::rc::Rc;
 use std::time::Duration;
 use particle::{Particle, ParticleGroup};
 use crate::particles::color::ParticleColor;
-use crate::particles::geometry::PointF;
+use crate::particles::geometry::Vec2D;
 use crate::particles::quantity::VariableQuantity;
 use crate::particles::source::{ParticlePositionSource, ParticleSource};
 
@@ -15,6 +15,7 @@ pub mod quantity;
 pub mod prescribed;
 pub mod color;
 pub mod particle;
+mod meta;
 
 pub struct Particles {
     particles: Vec<ParticleGroup>,

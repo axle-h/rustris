@@ -7,7 +7,7 @@ use crate::game::Game;
 use sdl2::mixer::Music;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
-use sdl2::render::{Texture, WindowCanvas};
+use sdl2::render::{BlendMode, Texture, WindowCanvas};
 use crate::game::board::BOARD_WIDTH;
 use crate::game::tetromino::TetrominoShape;
 use crate::particles::prescribed::{PlayerParticleTarget, PlayerTargetedParticles, PrescribedParticles};
@@ -126,7 +126,9 @@ impl<'a> Theme<'a> {
                 match animate {
                     TextureAnimate::SetAlpha => {
                         // simulate alpha by copying over the board background
+                        self.board_texture.set_blend_mode(BlendMode::None);
                         canvas.copy(&self.board_texture, line_snip, line_snip)?;
+                        self.board_texture.set_blend_mode(BlendMode::Blend);
                     }
                     TextureAnimate::FillAlphaRectangle { width } => {
                         // simulate alpha by copying over the board background
@@ -142,7 +144,9 @@ impl<'a> Theme<'a> {
                             rect_width,
                             row_rect.height(),
                         );
+                        self.board_texture.set_blend_mode(BlendMode::None);
                         canvas.copy(&self.board_texture, src_rect, dst_rect)?;
+                        self.board_texture.set_blend_mode(BlendMode::Blend);
                     }
                     _ => {}
                 }
@@ -232,6 +236,10 @@ impl<'a> Theme<'a> {
             TetrominoScaleType::Center =>
                 self.sprite_sheet.draw_tetromino_in_center(canvas, shape, snip)
         }
+    }
+
+    pub fn particle_color(&self) -> Option<Color> {
+        self.particle_color
     }
 }
 

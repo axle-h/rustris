@@ -14,6 +14,9 @@ pub enum ParticlePositionSource {
     /// All particles are emitted from one point
     Static(Vec2D),
 
+    /// All particles in each cascade are emitted from a random point within a rectangle.
+    RandomCascade(RectF),
+
     /// Emitted randomly within a rectangle
     Rect(RectF),
 
@@ -45,23 +48,31 @@ pub struct ParticleProperties {
     sprites: Vec<ParticleSprite>,
     color: VariableQuantity<ParticleColor>,
     size: VariableQuantity<f64>,
+    angular_velocity: VariableQuantity<f64>,
 }
 
 impl ParticleProperties {
-    pub fn new<C, S>(sprites: &[ParticleSprite], color: C, size: S) -> Self
+    pub fn new<C, S, R>(sprites: &[ParticleSprite], color: C, size: S, angular_velocity: R) -> Self
     where C : Into<VariableQuantity<ParticleColor>>,
-          S : Into<VariableQuantity<f64>> {
+          S : Into<VariableQuantity<f64>>,
+          R : Into<VariableQuantity<f64>> {
         assert!(!sprites.is_empty());
-        Self { rng: thread_rng(), sprites: sprites.to_vec(), color: color.into(), size: size.into() }
+        Self { rng: thread_rng(), sprites: sprites.to_vec(), color: color.into(), size: size.into(), angular_velocity: angular_velocity.into() }
+    }
+
+    pub fn simple<S>(sprites: &[ParticleSprite], size: S) -> Self
+        where S : Into<VariableQuantity<f64>> {
+        assert!(!sprites.is_empty());
+        Self::new(sprites, ParticleColor::WHITE, size, 0.0)
+    }
+
+    pub fn angular_velocity<R : Into<VariableQuantity<f64>>>(mut self, value: R) -> Self {
+        self.angular_velocity = value.into();
+        self
     }
 
     pub fn default() -> Self {
-        Self {
-            rng: thread_rng(),
-            sprites: vec![ParticleSprite::Circle05],
-            color: VariableQuantity::new(ParticleColor::WHITE, ParticleColor::ZERO),
-            size: VariableQuantity::new(1.0, 0.0)
-        }
+        Self::new(&[ParticleSprite::Circle05], ParticleColor::WHITE, (1.0, 0.0), 0.0)
     }
 
     pub fn next_sprite(&mut self) -> &ParticleSprite {
@@ -117,6 +128,10 @@ impl ParticleSource for RandomParticleSource {
 
         let particles = match &self.position_source {
             ParticlePositionSource::Lattice(points) => points.iter().take(emit_particles as usize).copied().collect::<Vec<Vec2D>>(),
+            ParticlePositionSource::RandomCascade(rect) => {
+                let point = self.next_position();
+                (0..emit_particles).map(|_| point).collect()
+            },
             _ => (0..emit_particles).map(|_| self.next_position()).collect()
         }.into_iter().map(|p| self.next_particle(p)).collect();
 
@@ -177,7 +192,7 @@ impl RandomParticleSource {
             acceleration: VariableQuantity::new(Vec2D::ZERO, Vec2D::ZERO),
             alpha: alpha.into(),
             orbit: None,
-            properties: ProbabilityTable::identity(ParticleProperties::new(&[sprite], color, 1.0))
+            properties: ProbabilityTable::identity(ParticleProperties::new(&[sprite], color, 1.0, 0.0))
         }
     }
 
@@ -195,15 +210,17 @@ impl RandomParticleSource {
         self
     }
 
-    pub fn with_static_properties<C, S>(
+    pub fn with_static_properties<C, S, R>(
         mut self,
         sprite: ParticleSprite,
         color: C,
-        size: S
+        size: S,
+        angular_velocity: R
     ) -> Self
     where C : Into<VariableQuantity<ParticleColor>>,
-          S : Into<VariableQuantity<f64>> {
-        self.with_properties(ProbabilityTable::identity(ParticleProperties::new(&[sprite], color, size)))
+          S : Into<VariableQuantity<f64>>,
+          R : Into<VariableQuantity<f64>> {
+        self.with_properties(ProbabilityTable::identity(ParticleProperties::new(&[sprite], color, size, angular_velocity)))
     }
 
     pub fn with_properties(mut self, properties: ProbabilityTable<ParticleProperties>) -> Self {
@@ -272,7 +289,7 @@ impl RandomParticleSource {
     fn next_position(&self) -> Vec2D {
         match self.position_source {
             ParticlePositionSource::Static(point) => point,
-            ParticlePositionSource::Rect(rect) => {
+            ParticlePositionSource::RandomCascade(rect) | ParticlePositionSource::Rect(rect) => {
                 let x = rect.x() + rect.width() * rand::random::<f64>();
                 let y = rect.y() + rect.height() * rand::random::<f64>();
                 Vec2D::new(x, y)
@@ -295,6 +312,7 @@ impl RandomParticleSource {
             self.lifetime_secs.as_mut().map(|l| l.next()),
             *properties.next_sprite(),
             properties.size.next(),
+            properties.angular_velocity.next()
         )
     }
 }

@@ -8,7 +8,8 @@ use sdl2::video::WindowContext;
 pub enum FontType {
     Normal,
     Bold,
-    Mono
+    Mono,
+    Handjet
 }
 
 impl FontType {
@@ -20,7 +21,8 @@ impl FontType {
         match self {
             FontType::Normal => "resource/font/Roboto-Regular.ttf",
             FontType::Bold => "resource/font/Roboto-Bold.ttf",
-            FontType::Mono => "resource/font/RobotoMono-Regular.ttf"
+            FontType::Mono => "resource/font/RobotoMono-Regular.ttf",
+            FontType::Handjet => "resource/font/Handjet.ttf"
         }
     }
 }

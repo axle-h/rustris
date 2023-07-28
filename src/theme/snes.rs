@@ -10,7 +10,7 @@ use crate::theme::font::{alpha_sprites, FontRenderOptions, MetricSnips};
 use crate::theme::geometry::VISIBLE_BUFFER;
 use crate::theme::sound::SoundThemeOptions;
 use crate::theme::sprite_sheet::TetrominoSpriteSheetMeta;
-use crate::theme::Theme;
+use crate::theme::{Theme, ThemeName};
 
 const ALPHA_WIDTH: u32 = 7;
 const ALPHA_HEIGHT: u32 = 8;
@@ -31,7 +31,7 @@ pub fn snes_theme<'a>(
     config: Config,
 ) -> Result<Theme<'a>, String> {
     let options = RetroThemeOptions::new(
-        "snes",
+        ThemeName::Snes,
         config,
         TetrominoSpriteSheetMeta::new(
             "resource/snes/sprites.png",
@@ -67,9 +67,9 @@ pub fn snes_theme<'a>(
             mino(0, 0),
             0x50
         ),
-        "background.png",
-        "board.png",
-        "game-over.png",
+        "resource/snes/background.png",
+        "resource/snes/board.png",
+        "resource/snes/game-over.png",
         [
             Rect::new(168, 17 + BUFFER_PIXELS as i32, 32, 32),
             Rect::new(168, 58 + BUFFER_PIXELS as i32, 32, 32),

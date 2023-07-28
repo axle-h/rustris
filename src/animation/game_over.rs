@@ -4,6 +4,7 @@ use std::time::Duration;
 
 const CURTAIN_LINE_DELAY: Duration = Duration::from_millis(30);
 const CURTAIN_CLOSED_FOR: Duration = Duration::from_millis(2000);
+const CURTAIN_OPEN_FOR: Duration = Duration::from_millis(2000);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GameOverAnimationType {
@@ -23,6 +24,7 @@ enum State {
     CloseCurtain(Duration, u32),
     CurtainClosed(Duration),
     OpenCurtain(Duration, u32),
+    CurtainOpen(Duration),
     Finished,
 }
 
@@ -45,13 +47,13 @@ impl GameOverAnimation {
             State::CloseCurtain(duration, count) => self.close_curtain(duration + delta, count),
             State::CurtainClosed(duration) => self.curtain_closed(duration + delta),
             State::OpenCurtain(duration, count) => self.open_curtain(duration + delta, count),
+            State::CurtainOpen(duration) => self.curtain_open(duration + delta),
         };
         self.current()
     }
 
     pub fn current(&self) -> GameOverAnimate {
         match self.state {
-            State::Finished => GameOverAnimate::Finished,
             State::CloseCurtain(_, count) => {
                 let range = match self.animation_type {
                     GameOverAnimationType::CurtainUp => 0..count,
@@ -67,6 +69,8 @@ impl GameOverAnimation {
                 };
                 GameOverAnimate::CurtainOpening(range)
             }
+            State::CurtainOpen(_) => GameOverAnimate::CurtainOpening(0..0),
+            State::Finished => GameOverAnimate::Finished,
         }
     }
 
@@ -97,10 +101,18 @@ impl GameOverAnimation {
         } else {
             let count = count + 1;
             if count > BOARD_HEIGHT {
-                State::Finished
+                State::CurtainOpen(Duration::ZERO)
             } else {
                 State::OpenCurtain(Duration::ZERO, count)
             }
+        }
+    }
+
+    fn curtain_open(&self, duration: Duration) -> State {
+        if duration < CURTAIN_OPEN_FOR {
+            State::CurtainOpen(duration)
+        } else {
+            State::Finished
         }
     }
 }

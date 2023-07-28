@@ -52,6 +52,10 @@ impl Scale {
         ParticlePositionSource::Rect(self.rect_to_particle_space(rect.into()))
     }
 
+    pub fn random_rect_source<R : Into<Rect>>(&self, rect: R) -> ParticlePositionSource {
+        ParticlePositionSource::RandomCascade(self.rect_to_particle_space(rect.into()))
+    }
+
     pub fn rect_lattice_source(&self, rects: &[Rect]) -> ParticlePositionSource {
         let points = rects.into_iter().flat_map(|r| self.lattice_points(*r)).collect();
         ParticlePositionSource::Lattice(points)

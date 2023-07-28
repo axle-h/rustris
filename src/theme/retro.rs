@@ -2,7 +2,7 @@ use crate::animation::destroy::DestroyAnimationType;
 use crate::animation::game_over::GameOverAnimationType;
 use crate::config::Config;
 use crate::theme::sound::SoundThemeOptions;
-use crate::theme::{TetrominoScaleType, Theme, VISIBLE_PEEK};
+use crate::theme::{create_mask_texture, TetrominoScaleType, Theme, ThemeName, VISIBLE_PEEK};
 use sdl2::image::LoadTexture;
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
@@ -13,7 +13,7 @@ use crate::theme::geometry::BoardGeometry;
 use crate::theme::sprite_sheet::{MinoType, TetrominoSpriteSheet, TetrominoSpriteSheetMeta};
 
 pub struct RetroThemeOptions {
-    name: String,
+    name: ThemeName,
     config: Config,
     block_size: u32,
     sprite_sheet_meta: TetrominoSpriteSheetMeta,
@@ -36,7 +36,7 @@ pub struct RetroThemeOptions {
 
 impl RetroThemeOptions {
     pub fn new(
-        name: &str,
+        name: ThemeName,
         config: Config,
         sprite_sheet_meta: TetrominoSpriteSheetMeta,
         background_file: &str,
@@ -59,7 +59,7 @@ impl RetroThemeOptions {
         let geometry = BoardGeometry::new(block_size, game_point);
         let buffer_height = geometry.buffer_height() as i32;
         Self {
-            name: name.to_string(),
+            name,
             config,
             block_size,
             sprite_sheet_meta,
@@ -79,22 +79,6 @@ impl RetroThemeOptions {
             game_over_animation,
             sound
         }
-    }
-
-    fn resource(&self, name: &str) -> String {
-        format!("resource/{}/{}", self.name, name)
-    }
-
-    fn background_file(&self) -> String {
-        self.resource(&self.background_file)
-    }
-
-    fn board_file(&self) -> String {
-        self.resource(&self.board_file)
-    }
-
-    fn game_over_file(&self) -> String {
-        self.resource(&self.game_over_file)
     }
 }
 
@@ -117,9 +101,10 @@ pub fn plus_buffer<'a>(
     Ok((texture, query.width, query.height + buffer_height))
 }
 
-pub fn retro_theme<'a>(canvas: &mut WindowCanvas,
-                   texture_creator: &'a TextureCreator<WindowContext>,
-                   options: RetroThemeOptions,
+pub fn retro_theme<'a>(
+    canvas: &mut WindowCanvas,
+    texture_creator: &'a TextureCreator<WindowContext>,
+    options: RetroThemeOptions,
 ) -> Result<Theme<'a>, String> {
     let sprite_sheet = TetrominoSpriteSheet::new(canvas, texture_creator, options.sprite_sheet_meta.clone(), options.block_size)?;
 
@@ -127,8 +112,11 @@ pub fn retro_theme<'a>(canvas: &mut WindowCanvas,
         canvas,
         texture_creator,
         options.geometry.buffer_height(),
-        options.board_file()
+        options.board_file
     )?;
+
+    let board_mask_texture = create_mask_texture(canvas, texture_creator, &board_texture)?;
+
     let board_snip = Rect::new(
         options.board_point.x(),
         options.board_point.y(),
@@ -136,17 +124,19 @@ pub fn retro_theme<'a>(canvas: &mut WindowCanvas,
         board_height,
     );
 
-    let (background_texture, bg_width, bg_height) = plus_buffer(canvas, texture_creator, options.geometry.buffer_height(), options.background_file())?;
+    let (background_texture, bg_width, bg_height) = plus_buffer(canvas, texture_creator, options.geometry.buffer_height(), options.background_file)?;
 
     let font = options.font_options.build(texture_creator)?;
 
-    let game_over = texture_creator.load_texture(options.game_over_file())?;
+    let game_over = texture_creator.load_texture(options.game_over_file)?;
     let sound = options.sound.clone().build()?;
 
     Ok(Theme {
+        name: options.name,
         sprite_sheet,
         geometry: options.geometry,
         board_texture,
+        board_mask_texture,
         board_snip,
         background_texture,
         background_size: (bg_width, bg_height),

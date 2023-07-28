@@ -22,6 +22,18 @@ struct TetrominoTexture<'a> {
     is_symmetrical: bool
 }
 
+impl<'a> TetrominoTexture<'a> {
+    fn texture(&self, mino_type: MinoType) -> &Texture {
+        match mino_type {
+            MinoType::Normal => &self.normal,
+            MinoType::Ghost => &self.ghost,
+            MinoType::Stack => &self.stack,
+            MinoType::Perimeter => &self.perimeter,
+            _ => unreachable!()
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MinoType {
     Normal,
@@ -151,6 +163,21 @@ impl TetrominoSpriteSheetMeta {
 
     pub fn block_size(&self) -> u32 {
         self.source_block_size
+    }
+}
+
+pub struct FlatTetrominoSpriteSheet<'a> {
+    texture: Texture<'a>,
+    snips: HashMap<TetrominoShape, Rect>
+}
+
+impl<'a> FlatTetrominoSpriteSheet<'a> {
+    pub fn texture(&self) -> &Texture<'a> {
+        &self.texture
+    }
+
+    pub fn snip(&self, shape: TetrominoShape) -> Rect {
+        self.snips[&shape]
     }
 }
 
@@ -339,13 +366,13 @@ impl<'a> TetrominoSpriteSheet<'a> {
         canvas.copy(&self.garbage, None, self.mino_rect(dest))
     }
 
-    pub fn draw_tetromino_in_center(&self, canvas: &mut WindowCanvas, shape: TetrominoShape, dest: Rect) -> Result<(), String> {
+    pub fn draw_tetromino_in_center(&self, canvas: &mut WindowCanvas, shape: TetrominoShape, mino_type: MinoType, dest: Point) -> Result<(), String> {
         let tetromino = self.tetrominos.get(&shape).unwrap();
-        let rect = Rect::from_center(dest.center(), tetromino.width, tetromino.height);
-        canvas.copy(&tetromino.normal, None, rect)
+        let rect = Rect::from_center(dest, tetromino.width, tetromino.height);
+        canvas.copy(tetromino.texture(mino_type), None, rect)
     }
 
-    pub fn draw_tetromino_fill(&self, canvas: &mut WindowCanvas, shape: TetrominoShape, dest: Rect, max_scale: f64) -> Result<(), String> {
+    pub fn draw_tetromino_fill(&self, canvas: &mut WindowCanvas, shape: TetrominoShape, mino_type: MinoType, dest: Rect, max_scale: f64) -> Result<(), String> {
         let tetromino = self.tetrominos.get(&shape).unwrap();
         let scale_x = dest.width() as f64 / tetromino.width as f64;
         let scale_y = dest.height() as f64 / tetromino.height as f64;
@@ -355,7 +382,7 @@ impl<'a> TetrominoSpriteSheet<'a> {
             (scale * tetromino.width as f64).round() as u32,
             (scale * tetromino.height as f64).round() as u32
         );
-        canvas.copy(&tetromino.normal, None, rect)
+        canvas.copy(tetromino.texture(mino_type), None, rect)
     }
 
     pub fn draw_board(&self, canvas: &mut WindowCanvas, game: &Game, geometry: &BoardGeometry, ghost_type: MinoType) -> Result<(), String> {
@@ -386,13 +413,7 @@ impl<'a> TetrominoSpriteSheet<'a> {
         let tetromino = self.tetrominos.get(&shape).unwrap();
         let snip = tetromino.snips[mino_id as usize];
         let dest = self.mino_rect(dest);
-        let texture = match mino_type {
-            MinoType::Normal => &tetromino.normal,
-            MinoType::Ghost => &tetromino.ghost,
-            MinoType::Stack => &tetromino.stack,
-            MinoType::Perimeter => &tetromino.perimeter,
-            _ => unreachable!()
-        };
+        let texture = tetromino.texture(mino_type);
         if mino_type != MinoType::Perimeter && tetromino.is_symmetrical {
             canvas.copy(texture, snip, dest)
         } else {
@@ -403,4 +424,36 @@ impl<'a> TetrominoSpriteSheet<'a> {
     fn mino_rect(&self, point: Point) -> Rect {
         Rect::new(point.x(), point.y(), self.block_size, self.block_size)
     }
+
+    pub fn flatten<'b>(
+        &self,
+        canvas: &mut WindowCanvas,
+        texture_creator: &'b TextureCreator<WindowContext>,
+        mino_type: MinoType
+    ) -> Result<FlatTetrominoSpriteSheet<'b>, String> {
+        let sizes = TetrominoShape::ALL.map(|s| {
+            let tetromino = self.tetrominos.get(&s).unwrap();
+            (tetromino.width, tetromino.height)
+        });
+        let width = sizes.map(|(w, _)| w).into_iter().sum::<u32>();
+        let height = sizes.map(|(_, h)| h).into_iter().max().unwrap();
+        let mut texture = texture_creator.create_texture_target(None, width, height)
+            .map_err(|e| e.to_string())?;
+        texture.set_blend_mode(BlendMode::Blend);
+
+        let mut snips = HashMap::new();
+        canvas.with_texture_canvas(&mut texture, |c| {
+            let mut x = 0;
+            for (shape, tetromino) in self.tetrominos.iter() {
+                let rect = Rect::new(x, 0, tetromino.width, tetromino.height);
+                snips.insert(*shape, rect);
+                c.copy(tetromino.texture(mino_type), None, rect).unwrap();
+                x += tetromino.width as i32;
+            }
+        }).map_err(|e| e.to_string())?;
+
+        Ok(FlatTetrominoSpriteSheet { texture, snips })
+    }
 }
+
+

@@ -28,8 +28,7 @@ pub enum PrescribedParticles {
     BurstUp { color: Color },
     BurstDown { color: Color },
     PerimeterBurst { color: Color },
-    PerimeterSpray { color: Color },
-    Orbit { color: Color },
+    PerimeterSpray { color: Color }
 }
 
 impl PrescribedParticles {
@@ -41,7 +40,7 @@ impl PrescribedParticles {
         match self {
             PrescribedParticles::FadeInLatticeBurstAndFall { fade_in, color } =>
                 RandomParticleSource::new(scale.rect_lattice_source(rects), ParticleModulation::Cascade)
-                    .with_static_properties(ParticleSprite::Circle05, ParticleColor::from_sdl(color), 1.0)
+                    .with_static_properties(ParticleSprite::Circle05, ParticleColor::from_sdl(color), 1.0, 0.0)
                     .with_velocity((Vec2D::new(0.0, -0.4), Vec2D::new(0.1, 0.1)))
                     .with_acceleration(Vec2D::new(0.0, 1.5)) // gravity
                     .with_anchor(fade_in)
@@ -87,39 +86,75 @@ impl PrescribedParticles {
                     .map(|s| s.with_modulation(ParticleModulation::Constant { count: u32::MAX, step: Duration::from_millis(750) }))
                     .collect();
                 AggregateParticleSource::new(sources).into_box()
-            },
-            PrescribedParticles::Orbit { color } => {
-                let color = ParticleColor::from_sdl(color);
-                const V: f64 = 0.05;
-                let [top_left, top_right, bottom_right, bottom_left] = rect_quadrants(rects[0]);
-                let sources = vec![
-                    orbit_source(scale, top_left, color, (V, -V)),
-                    orbit_source(scale, top_right, color, (V, V)),
-                    orbit_source(scale, bottom_right, color, (-V, V)),
-                    orbit_source(scale, bottom_left, color, (-V, -V)),
-                ];
-                AggregateParticleSource::new(sources).into_box()
             }
         }
     }
 }
 
-fn orbit_source<V : Into<Vec2D>>(scale: &Scale, rect: Rect, color: ParticleColor, velocity: V) -> RandomParticleSource {
+pub fn prescribed_fireworks(window: Rect, scale: &Scale) -> Box<dyn ParticleSource> {
+    let modulation = ParticleModulation::Constant { count: 100, step: Duration::from_millis(500) };
+    let buffer = window.height() / 5;
+    let rect = Rect::from_center(window.center(), window.width() - buffer, window.height() - buffer);
+    RandomParticleSource::new(scale.random_rect_source(rect), modulation)
+        .with_static_properties(
+            ParticleSprite::Circle05,
+            (ParticleColor::rgb(0.5, 0.5, 0.5), ParticleColor::rgb(0.5, 0.5, 0.5)),
+            1.0,
+            0.0
+        )
+        .with_velocity((Vec2D::new(0.0, -0.05), Vec2D::new(0.15, 0.15)))
+        .with_fade_out((1.5, 0.5))
+        .with_acceleration(Vec2D::new(0.0, 0.1)) // gravity
+        .with_alpha((0.9, 0.1))
+        .into_box()
+}
+
+pub fn prescribed_tetromino_race(window: Rect, scale: &Scale) -> Box<dyn ParticleSource> {
+    let modulation = ParticleModulation::Constant { count: 1, step: Duration::from_millis(1000) };
+    let buffer_y = window.height() / 10;
+    let rect = Rect::new(window.left() - 50, window.top() + buffer_y as i32, 50, window.height() - 2 * buffer_y);
+    let rotation = (0.0, 30.0);
+    RandomParticleSource::new(scale.rect_source(rect), modulation)
+        .with_properties(ProbabilityTable::new()
+            .with_1(ParticleProperties::simple(&ParticleSprite::MODERN_TETROMINOS, (1.0, 0.2)).angular_velocity(rotation))
+            .with_1(ParticleProperties::simple(&ParticleSprite::NES_TETROMINOS, (4.0, 0.2)).angular_velocity(rotation))
+            .with_1(ParticleProperties::simple(&ParticleSprite::SNES_TETROMINOS, (4.0, 0.2)).angular_velocity(rotation))
+        )
+        .with_velocity((Vec2D::new(0.2, 0.0), Vec2D::new(0.05, 0.02)))
+        .with_alpha((0.9, 0.1))
+        .into_box()
+}
+
+pub fn prescribed_orbit(window: Rect, scale: &Scale) -> Box<dyn ParticleSource> {
+    const V: f64 = 0.05;
+    let [top_left, top_right, bottom_right, bottom_left] = rect_quadrants(window);
+    let sources = vec![
+        orbit_source(scale, top_left, (V, -V)),
+        orbit_source(scale, top_right, (V, V)),
+        orbit_source(scale, bottom_right, (-V, V)),
+        orbit_source(scale, bottom_left, (-V, -V)),
+    ];
+    AggregateParticleSource::new(sources).into_box()
+}
+
+fn orbit_source<V : Into<Vec2D>>(scale: &Scale, rect: Rect, velocity: V) -> RandomParticleSource {
     let modulation = ParticleModulation::Constant { count: 10, step: Duration::from_millis(1000) };
     let velocity = velocity.into();
     RandomParticleSource::new(scale.rect_source(rect), modulation)
         .with_properties(ProbabilityTable::new()
-            .with(ParticleProperties::new(&[ParticleSprite::Circle05], color, (1.0, 0.3)), 0.8)
+            .with(ParticleProperties::simple(&[ParticleSprite::Circle05], (1.0, 0.3)), 0.8)
             .with(ParticleProperties::new(
                 &ParticleSprite::HOLLOW_CIRCLES,
-                (ParticleColor::new(0.6, 0.6, 0.8), ParticleColor::new(0.1, 0.1, 0.1)),
-                (1.5, 0.4)),
+                (ParticleColor::rgb(0.6, 0.6, 0.8), ParticleColor::rgb(0.1, 0.1, 0.1)),
+                (1.5, 0.4),
+                0.0),
                   0.1
             )
             .with(ParticleProperties::new(
                 &ParticleSprite::STARS,
-                (ParticleColor::new(0.8, 0.6, 0.6), ParticleColor::new(0.1, 0.1, 0.1)),
-                (1.6, 0.4)),
+                (ParticleColor::rgb(0.8, 0.6, 0.6), ParticleColor::rgb(0.1, 0.1, 0.1)),
+                (1.6, 0.4),
+                0.0),
                   0.1
             )
         )
@@ -135,7 +170,6 @@ fn rect_quadrants(rect: Rect) -> [Rect; 4] {
     fn quad(point: Point, rect: Rect) -> Rect {
         Rect::new(point.x(), point.y(), rect.width() / 2, rect.height() / 2)
     }
-
     [
         quad(rect.top_left(), rect), // top left
         quad(Point::new(rect.center().x(), rect.top()), rect), // top right

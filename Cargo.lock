@@ -634,14 +634,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustic-tetris"
-version = "1.1.0"
+name = "rustris"
+version = "1.2.0"
 dependencies = [
  "bitflags 2.3.3",
  "build-info",
  "build-info-build",
  "confy",
  "num-format",
+ "once_cell",
  "rand",
  "rand_chacha",
  "sdl2",

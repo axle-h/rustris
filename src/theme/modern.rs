@@ -12,7 +12,7 @@ use crate::theme::font::{FontRender, MetricSnips};
 use crate::theme::geometry::{BoardGeometry, VISIBLE_BOARD_HEIGHT};
 use crate::theme::sound::SoundThemeOptions;
 use crate::theme::sprite_sheet::{MinoType, TetrominoSpriteSheet, TetrominoSpriteSheetMeta};
-use crate::theme::{TetrominoScaleType, Theme, VISIBLE_PEEK};
+use crate::theme::{create_mask_texture, TetrominoScaleType, Theme, ThemeName, VISIBLE_PEEK};
 
 const MIN_VERTICAL_BUFFER_PCT: f64 = 0.1;
 const BOARD_BORDER_PCT_OF_BLOCK: f64 = 0.5;
@@ -20,9 +20,9 @@ const BOARD_BOARDER_SHADOW: u8 = 0x99;
 const TETROMINO_PCT_OF_BLOCK: f64 = 1.5;
 const BIG_TETROMINO_PCT_OF_BLOCK: f64 = 2.5;
 
-// 3 blocks is good as most are 3 blocks wide, then we scale I down and O up to 3.
-const TETROMINO_PREFERRED_SCALE: f64 = TETROMINO_PCT_OF_BLOCK / 3.0;
-const BIG_TETROMINO_PREFERRED_SCALE: f64 = BIG_TETROMINO_PCT_OF_BLOCK / 3.0;
+// 3 blocks is good as most are 3 blocks wide, then I & O meet in the middle.
+const TETROMINO_PREFERRED_BLOCK_SCALE: f64 = TETROMINO_PCT_OF_BLOCK / 3.0;
+const BIG_TETROMINO_PREFERRED_BLOCK_SCALE: f64 = BIG_TETROMINO_PCT_OF_BLOCK / 3.0;
 
 const VERTICAL_GUTTER_PCT_OF_BLOCK: f64 = 0.2;
 
@@ -240,6 +240,7 @@ pub fn modern_theme<'a>(
         c.set_draw_color(Color::RGBA(0, 0, 0, 0));
         c.fill_rect(Rect::new(border_weight as i32, 0, geometry.width(), geometry.visible_height())).unwrap();
     }).map_err(|e| e.to_string())?;
+    let board_mask_texture = create_mask_texture(canvas, texture_creator, &board_texture)?;
 
     let mut bg_texture = texture_creator
         .create_texture_target(None, background_width, background_height)
@@ -272,8 +273,10 @@ pub fn modern_theme<'a>(
 
     Ok(
         Theme {
+            name: ThemeName::Modern,
             sprite_sheet: TetrominoSpriteSheet::new(canvas, texture_creator, sprite_sheet_meta, block_size)?,
             board_texture,
+            board_mask_texture,
             background_texture: bg_texture,
             geometry,
             background_size: (background_width, background_height),
@@ -291,8 +294,8 @@ pub fn modern_theme<'a>(
             game_over_animation: GameOverAnimationType::CurtainUp,
             ghost_mino_type: MinoType::Perimeter,
             tetromino_scale_type: TetrominoScaleType::Fill {
-                default_scale: TETROMINO_PREFERRED_SCALE,
-                peek0_scale: BIG_TETROMINO_PREFERRED_SCALE
+                default_scale: TETROMINO_PREFERRED_BLOCK_SCALE,
+                peek0_scale: BIG_TETROMINO_PREFERRED_BLOCK_SCALE
             },
             particle_color: Some(Color::WHITE)
         }

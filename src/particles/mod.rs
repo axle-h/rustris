@@ -44,6 +44,11 @@ impl Particles {
         // todo update color size rotation
     }
 
+    pub fn clear(&mut self) {
+        self.particles.clear();
+        self.sources.clear();
+    }
+
     fn update_life(&mut self, delta_time: f64) {
         let mut to_remove = vec![];
         for (i, group) in self.particles.iter_mut().enumerate() {

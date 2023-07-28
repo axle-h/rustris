@@ -37,6 +37,8 @@ pub struct Particle {
     time_to_live: Option<f64>,
     sprite: ParticleSprite,
     size: f64,
+    rotation: f64,
+    angular_velocity: f64
 }
 
 impl Particle {
@@ -50,22 +52,26 @@ impl Particle {
         color: ParticleColor,
         time_to_live: Option<f64>,
         sprite: ParticleSprite,
-        size: f64
+        size: f64,
+        angular_velocity: f64
     ) -> Self {
-        Self { position, velocity, acceleration, max_alpha, alpha, pulse, color, time_to_live, sprite, size }
+        Self { position, velocity, acceleration, max_alpha, alpha, pulse, color, time_to_live, sprite, size, rotation: 0.0, angular_velocity }
     }
 
     /// checks if the particle is out of bounds (0-1) and trajectory will not bring it back
     pub fn is_escaped(&self) -> bool {
-        (self.position.x() > 1.0 && self.velocity.x() >= 0.0 && self.acceleration.x() >= 0.0)
-            || (self.position.x() < 0.0 && self.velocity.x() <= 0.0 && self.acceleration.x() <= 0.0)
-            || (self.position.y() > 1.0 && self.velocity.y() >= 0.0 && self.acceleration.y() >= 0.0)
-            || (self.position.y() < 0.0 && self.velocity.y() <= 0.0 && self.acceleration.y() <= 0.0)
+        const THRESHOLD_MAX: f64 = 1.05;
+        const THRESHOLD_MIN: f64 = -0.05;
+        (self.position.x() > THRESHOLD_MAX && self.velocity.x() >= 0.0 && self.acceleration.x() >= 0.0)
+            || (self.position.x() < THRESHOLD_MIN && self.velocity.x() <= 0.0 && self.acceleration.x() <= 0.0)
+            || (self.position.y() > THRESHOLD_MAX && self.velocity.y() >= 0.0 && self.acceleration.y() >= 0.0)
+            || (self.position.y() < THRESHOLD_MIN && self.velocity.y() <= 0.0 && self.acceleration.y() <= 0.0)
     }
 
     pub fn update(&mut self, delta_time: f64) {
         self.velocity += self.acceleration * delta_time;
         self.position += self.velocity * delta_time;
+        self.rotation += self.angular_velocity * delta_time;
     }
 
     pub fn position(&self) -> Vec2D {
@@ -82,6 +88,9 @@ impl Particle {
     }
     pub fn size(&self) -> f64 {
         self.size
+    }
+    pub fn rotation(&self) -> f64 {
+        self.rotation
     }
 }
 
@@ -176,10 +185,10 @@ impl ParticleGroup {
         }
 
         for particle in self.particles.iter_mut() {
+            // pulse
             if let Some(pulse) = particle.pulse.as_ref() {
                 let pulse_magnitude = pulse.next(self.lifetime);
                 particle.alpha = (particle.alpha + pulse_magnitude).min(particle.max_alpha).max(0.0);
-
             }
         }
     }

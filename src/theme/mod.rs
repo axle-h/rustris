@@ -7,7 +7,8 @@ use crate::game::Game;
 use sdl2::mixer::Music;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
-use sdl2::render::{BlendMode, Texture, WindowCanvas};
+use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
+use sdl2::video::WindowContext;
 use crate::game::board::BOARD_WIDTH;
 use crate::game::tetromino::TetrominoShape;
 use crate::particles::prescribed::{PlayerParticleTarget, PlayerTargetedParticles, PrescribedParticles};
@@ -25,8 +26,23 @@ pub mod sprite_sheet;
 pub mod modern;
 pub mod geometry;
 pub mod font;
+pub mod all;
 
 const VISIBLE_PEEK: usize = 5;
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub enum ThemeName {
+    GameBoy,
+    Nes,
+    Snes,
+    Modern
+}
+
+impl Default for ThemeName {
+    fn default() -> Self {
+        ThemeName::Modern
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TetrominoScaleType {
@@ -37,10 +53,28 @@ pub enum TetrominoScaleType {
     Center
 }
 
+/// copies a texture with blend mode = none
+pub fn create_mask_texture<'a>(
+    canvas: &mut WindowCanvas,
+    texture_creator: &'a TextureCreator<WindowContext>,
+    texture: &Texture,
+) -> Result<Texture<'a>, String> {
+    let query = texture.query();
+    let mut mask_texture = texture_creator.create_texture_target(None, query.width, query.height)
+        .map_err(|e| e.to_string())?;
+    mask_texture.set_blend_mode(BlendMode::None);
+    canvas.with_texture_canvas(&mut mask_texture, |c| {
+        c.copy(texture, None, None).unwrap();
+    }).map_err(|e| e.to_string())?;
+    Ok(mask_texture)
+}
+
 pub struct Theme<'a> {
+    name: ThemeName,
     sprite_sheet: TetrominoSpriteSheet<'a>,
     geometry: BoardGeometry,
     board_texture: Texture<'a>,
+    board_mask_texture: Texture<'a>, // same as board texture but with blend mode set to none
     board_snip: Rect,
     background_texture: Texture<'a>,
     background_size: (u32, u32),
@@ -61,6 +95,10 @@ pub struct Theme<'a> {
 }
 
 impl<'a> Theme<'a> {
+    pub fn name(&self) -> ThemeName {
+        self.name
+    }
+
     pub fn geometry(&self) -> &BoardGeometry {
         &self.geometry
     }
@@ -73,7 +111,7 @@ impl<'a> Theme<'a> {
 
     pub fn board_snip(&self) -> Rect { self.board_snip }
 
-    pub fn draw_background(&mut self, canvas: &mut WindowCanvas, game: &Game) -> Result<(), String> {
+    pub fn draw_background(&self, canvas: &mut WindowCanvas, game: &Game) -> Result<(), String> {
         let metrics = game.metrics();
         canvas.set_draw_color(Color::RGBA(0, 0, 0, 0));
         canvas.clear();
@@ -98,7 +136,7 @@ impl<'a> Theme<'a> {
     }
 
     pub fn draw_board(
-        &mut self,
+        &self,
         canvas: &mut WindowCanvas,
         game: &Game,
         animate_lines: Vec<(u32, TextureAnimate)>,
@@ -126,9 +164,7 @@ impl<'a> Theme<'a> {
                 match animate {
                     TextureAnimate::SetAlpha => {
                         // simulate alpha by copying over the board background
-                        self.board_texture.set_blend_mode(BlendMode::None);
-                        canvas.copy(&self.board_texture, line_snip, line_snip)?;
-                        self.board_texture.set_blend_mode(BlendMode::Blend);
+                        canvas.copy(&self.board_mask_texture, line_snip, line_snip)?;
                     }
                     TextureAnimate::FillAlphaRectangle { width } => {
                         // simulate alpha by copying over the board background
@@ -144,9 +180,7 @@ impl<'a> Theme<'a> {
                             rect_width,
                             row_rect.height(),
                         );
-                        self.board_texture.set_blend_mode(BlendMode::None);
-                        canvas.copy(&self.board_texture, src_rect, dst_rect)?;
-                        self.board_texture.set_blend_mode(BlendMode::Blend);
+                        canvas.copy(&self.board_mask_texture, src_rect, dst_rect)?;
                     }
                     _ => {}
                 }
@@ -185,7 +219,7 @@ impl<'a> Theme<'a> {
         self.sound.music()
     }
 
-    pub fn play_sound_effects(&mut self, event: GameEvent) -> Result<(), String> {
+    pub fn play_sound_effects(&self, event: GameEvent) -> Result<(), String> {
         self.sound.receive_event(event)
     }
 
@@ -230,16 +264,21 @@ impl<'a> Theme<'a> {
     fn draw_tetromino(&self, canvas: &mut WindowCanvas, shape: TetrominoShape, snip: Rect, is_peek0: bool) -> Result<(), String> {
         match self.tetromino_scale_type {
             TetrominoScaleType::Fill { peek0_scale, .. } if is_peek0 =>
-                self.sprite_sheet.draw_tetromino_fill(canvas, shape, snip, peek0_scale),
+                self.sprite_sheet.draw_tetromino_fill(canvas, shape, MinoType::Normal, snip, peek0_scale),
             TetrominoScaleType::Fill { default_scale, .. } =>
-                self.sprite_sheet.draw_tetromino_fill(canvas, shape, snip, default_scale),
+                self.sprite_sheet.draw_tetromino_fill(canvas, shape, MinoType::Normal, snip, default_scale),
             TetrominoScaleType::Center =>
-                self.sprite_sheet.draw_tetromino_in_center(canvas, shape, snip)
+                self.sprite_sheet.draw_tetromino_in_center(canvas, shape, MinoType::Normal, snip.center())
         }
     }
 
     pub fn particle_color(&self) -> Option<Color> {
         self.particle_color
+    }
+
+
+    pub fn sprite_sheet(&self) -> &TetrominoSpriteSheet<'a> {
+        &self.sprite_sheet
     }
 }
 

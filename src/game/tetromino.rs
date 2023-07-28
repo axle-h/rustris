@@ -25,6 +25,12 @@ pub enum TetrominoShape {
     L,
 }
 
+impl Default for TetrominoShape {
+    fn default() -> Self {
+        TetrominoShape::I
+    }
+}
+
 impl TetrominoShape {
     pub const ALL: [TetrominoShape; 7] = [
         TetrominoShape::I, TetrominoShape::O, TetrominoShape::T, TetrominoShape::S,

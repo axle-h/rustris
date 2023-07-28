@@ -9,11 +9,11 @@ pub struct ParticleColor {
 }
 
 impl ParticleColor {
-    pub const WHITE: ParticleColor = ParticleColor::new(1.0, 1.0, 1.0);
-    pub const BLACK: ParticleColor = ParticleColor::new(0.0, 0.0, 0.0);
-    pub const ZERO: ParticleColor = ParticleColor::new(0.0, 0.0, 0.0);
+    pub const WHITE: ParticleColor = ParticleColor::rgb(1.0, 1.0, 1.0);
+    pub const BLACK: ParticleColor = ParticleColor::rgb(0.0, 0.0, 0.0);
+    pub const ZERO: ParticleColor = ParticleColor::rgb(0.0, 0.0, 0.0);
 
-    pub const fn new(red: f64, green: f64, blue: f64) -> Self {
+    pub const fn rgb(red: f64, green: f64, blue: f64) -> Self {
         Self { red, green, blue }
     }
 
@@ -21,7 +21,7 @@ impl ParticleColor {
         fn to_ratio(value: u8) -> f64 {
             value as f64 / 255.0
         }
-        ParticleColor::new(
+        ParticleColor::rgb(
             to_ratio(color.r),
             to_ratio(color.g),
             to_ratio(color.b)
@@ -44,7 +44,7 @@ fn to_byte(value: f64) -> u8 {
 
 impl From<(f64, f64, f64)> for ParticleColor {
     fn from((r, g, b): (f64, f64, f64)) -> Self {
-        ParticleColor::new(r, g, b)
+        ParticleColor::rgb(r, g, b)
     }
 }
 
@@ -70,7 +70,7 @@ impl Add for ParticleColor {
     type Output = ParticleColor;
 
     fn add(self, rhs: Self) -> Self::Output {
-        Self::new(self.red + rhs.red, self.green + rhs.green, self.blue + rhs.blue)
+        Self::rgb(self.red + rhs.red, self.green + rhs.green, self.blue + rhs.blue)
     }
 }
 
@@ -78,6 +78,6 @@ impl Mul for ParticleColor {
     type Output = ParticleColor;
 
     fn mul(self, rhs: Self) -> Self::Output {
-        Self::new(self.red * rhs.red, self.green * rhs.green, self.blue * rhs.blue)
+        Self::rgb(self.red * rhs.red, self.green * rhs.green, self.blue * rhs.blue)
     }
 }

@@ -107,7 +107,6 @@ impl SoundThemeOptions {
 }
 
 pub struct SoundTheme<'a> {
-    rng: ThreadRng,
     music: Music<'a>,
     move_tetromino: Chunk,
     rotate: Chunk,
@@ -127,7 +126,6 @@ impl<'a> SoundTheme<'a> {
     pub fn new(options: SoundThemeOptions) -> Result<Self, String> {
         let o = options.clone();
         Ok(Self {
-            rng: thread_rng(),
             music: options.load_music()?,
             move_tetromino: options.load_sound(o.move_tetromino)?,
             rotate: options.load_sound(o.rotate)?,
@@ -148,7 +146,7 @@ impl<'a> SoundTheme<'a> {
         &self.music
     }
 
-    pub fn receive_event(&mut self, event: GameEvent) -> Result<(), String> {
+    pub fn receive_event(&self, event: GameEvent) -> Result<(), String> {
         match event {
             GameEvent::Move => play_sound(&self.move_tetromino),
             GameEvent::Rotate => play_sound(&self.rotate),
@@ -181,7 +179,7 @@ impl<'a> SoundTheme<'a> {
                 if self.send_garbage.len() == 1 {
                     play_sound(&self.send_garbage[0])
                 } else {
-                    let sound = &self.send_garbage[self.rng.gen_range(0..self.send_garbage.len())];
+                    let sound = &self.send_garbage[thread_rng().gen_range(0..self.send_garbage.len())];
                     play_sound(sound)
                 }
             },

@@ -59,7 +59,7 @@ impl VariableQuantity<Vec2D> {
 
 impl VariableQuantity<ParticleColor> {
     pub fn next(&mut self) -> ParticleColor {
-        self.quantity + self.variance * ParticleColor::new(self.rng.gen(), self.rng.gen(), self.rng.gen())
+        self.quantity + self.variance * ParticleColor::rgb(self.rng.gen(), self.rng.gen(), self.rng.gen())
     }
 }
 
@@ -104,6 +104,10 @@ impl<T : Clone> ProbabilityTable<T> {
         self.rows.push(ProbabilityRow { value: value.into(), range_from: self.total, range_to: self.total + probability });
         self.total += probability;
         self
+    }
+
+    pub fn with_1<Z : Into<T>>(mut self, value: Z) -> Self {
+        self.with(value, 1.0)
     }
 
     pub fn next_mut(&mut self) -> &mut T {

@@ -14,7 +14,7 @@ use crate::theme::font::{alpha_sprites, FontRenderOptions, MetricSnips};
 use crate::theme::geometry::VISIBLE_BUFFER;
 use crate::theme::sound::SoundThemeOptions;
 use crate::theme::sprite_sheet::TetrominoSpriteSheetMeta;
-use crate::theme::Theme;
+use crate::theme::{Theme, ThemeName};
 
 const ALPHA_PIXELS: u32 = 6;
 const BLOCK_PIXELS: u32 = 8;
@@ -33,10 +33,10 @@ pub enum GameBoyPalette {
 
 fn game_boy_theme_options(palette: &GameBoyPalette, config: Config) -> RetroThemeOptions {
     RetroThemeOptions::new(
-        "gb",
+        ThemeName::GameBoy,
         config,
         TetrominoSpriteSheetMeta::new(
-            &format!("resource/gb/{}", palette.sprite_sheet_file()),
+            &palette.sprite_sheet_file(),
             BLOCK_PIXELS,
             [Point::new(1, 35), Point::new(9, 35), Point::new(17, 35), Point::new(25, 35)],
             Point::new(51, 26),
@@ -60,7 +60,7 @@ fn game_boy_theme_options(palette: &GameBoyPalette, config: Config) -> RetroThem
         ],
         Rect::new(12, 101 + BUFFER_PIXELS as i32, 32, 32),
         FontRenderOptions::Sprites {
-            file: format!("resource/gb/{}", palette.sprite_sheet_file()),
+            file: palette.sprite_sheet_file(),
             sprites: alpha_sprites(
                 (0 .. 10).map(|i| char_snip(3, i)).collect::<Vec<Point>>().try_into().unwrap(),
                 ALPHA_PIXELS,
@@ -86,7 +86,7 @@ impl GameBoyPalette {
             GameBoyPalette::GameBoyLight => "",
             GameBoyPalette::GreenSoup => "-gs",
         };
-        format!("{}{}.png", name, postfix)
+        format!("resource/gb/{}{}.png", name, postfix)
     }
 
     fn sprite_sheet_file(&self) -> String {

@@ -196,6 +196,7 @@ mod tests {
         for _ in 0..(BOARD_HEIGHT + 1) {
             subject.update(CURTAIN_LINE_DELAY);
         }
+        subject.update(CURTAIN_OPEN_FOR);
         assert_eq!(subject.current(), GameOverAnimate::Finished)
     }
 
@@ -209,6 +210,7 @@ mod tests {
         for _ in 0..(BOARD_HEIGHT + 1) {
             subject.update(CURTAIN_LINE_DELAY);
         }
+        subject.update(CURTAIN_OPEN_FOR);
         assert_eq!(subject.current(), GameOverAnimate::Finished)
     }
 }

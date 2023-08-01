@@ -15,6 +15,7 @@ x86_64-pc-windows-msvc = { triplet = "x64-windows-static-md" }
 
 [build-dependencies]
 build-info-build = "0.0.31"
+embed-resource = "2.2"
 
 [dependencies]
 rand = "0.8.5"

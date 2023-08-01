@@ -1,6 +1,6 @@
-use sdl2::rect::{Point, Rect};
 use crate::game::board::{BOARD_HEIGHT, BOARD_WIDTH};
 use crate::game::tetromino::Minos;
+use sdl2::rect::{Point, Rect};
 
 pub const VISIBLE_BUFFER: u32 = 2;
 pub const VISIBLE_BOARD_HEIGHT: u32 = BOARD_HEIGHT + VISIBLE_BUFFER;
@@ -12,16 +12,23 @@ pub struct BoardGeometry {
     buffer_height: u32,
     height: u32,
     width: u32,
-    offset: Point
+    offset: Point,
 }
 
 impl BoardGeometry {
-    pub fn new<P : Into<Point>>(block_size: u32, offset: P) -> Self {
+    pub fn new<P: Into<Point>>(block_size: u32, offset: P) -> Self {
         let visible_height = block_size * VISIBLE_BOARD_HEIGHT;
         let buffer_height = block_size * VISIBLE_BUFFER;
         let height = block_size * BOARD_HEIGHT;
         let width = block_size * BOARD_WIDTH;
-        Self { block_size, visible_height, buffer_height, height, width, offset: offset.into() }
+        Self {
+            block_size,
+            visible_height,
+            buffer_height,
+            height,
+            width,
+            offset: offset.into(),
+        }
     }
 
     fn j_to_y(&self, j: u32) -> u32 {
@@ -56,10 +63,6 @@ impl BoardGeometry {
         self.width
     }
 
-    pub fn offset(&self) -> Point {
-        self.offset
-    }
-
     pub fn line_snip(&self, j: u32) -> Rect {
         Rect::new(
             self.i_to_x(0) as i32,
@@ -83,11 +86,6 @@ impl BoardGeometry {
     }
 
     pub fn game_snip(&self) -> Rect {
-        Rect::new(
-            self.offset.x(),
-            self.offset.y(),
-            self.width,
-            self.height,
-        )
+        Rect::new(self.offset.x(), self.offset.y(), self.width, self.height)
     }
 }

@@ -1,4 +1,4 @@
-use sdl2::rect::{Point, Rect};
+use sdl2::rect::Rect;
 use std::cmp::min;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -7,11 +7,16 @@ pub struct Scale {
     scale: u32,
     window_width: u32,
     window_height: u32,
-    block_size: u32
+    block_size: u32,
 }
 
 impl Scale {
-    pub fn new(players: u32, game_size: (u32, u32), window_size: (u32, u32), block_size: u32) -> Self {
+    pub fn new(
+        players: u32,
+        game_size: (u32, u32),
+        window_size: (u32, u32),
+        block_size: u32,
+    ) -> Self {
         let (window_width, window_height) = window_size;
         let (bg_width, bg_height) = game_size;
         let scale = min(
@@ -23,7 +28,7 @@ impl Scale {
             scale,
             window_width,
             window_height,
-            block_size: block_size * scale
+            block_size: block_size * scale,
         }
     }
 
@@ -43,14 +48,6 @@ impl Scale {
         )
     }
 
-    pub fn scaled_window_center_rect(&self, width: u32, height: u32) -> Rect {
-        Rect::from_center(
-            Point::new(self.window_width as i32 / 2, self.window_height as i32 / 2),
-            width * self.scale,
-            height * self.scale,
-        )
-    }
-
     pub fn scale_length(&self, value: u32) -> u32 {
         value * self.scale
     }
@@ -64,7 +61,12 @@ impl Scale {
         )
     }
 
-    pub fn offset_proportional_to_block_size(&self, rect: Rect, offset_x: f64, offset_y: f64) -> Rect {
+    pub fn offset_proportional_to_block_size(
+        &self,
+        rect: Rect,
+        offset_x: f64,
+        offset_y: f64,
+    ) -> Rect {
         let block_size = self.block_size as f64;
         Rect::new(
             (rect.x as f64 + offset_x * block_size).round() as i32,

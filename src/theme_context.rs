@@ -1,13 +1,13 @@
-use crate::config::{Config, GameConfig, MatchThemes};
+use crate::config::{GameConfig, MatchThemes};
 use crate::game::tetromino::Minos;
 use crate::scale::Scale;
+use crate::theme::all::AllThemes;
 use crate::theme::Theme;
 use sdl2::rect::Rect;
 use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
+
 use sdl2::video::WindowContext;
 use std::time::Duration;
-use sdl2::ttf::Sdl2TtfContext;
-use crate::theme::all::AllThemes;
 
 const THEME_FADE_DURATION: Duration = Duration::from_millis(1000);
 
@@ -75,13 +75,18 @@ pub struct ScaledTheme<'a> {
 
 impl<'a> ScaledTheme<'a> {
     fn new(theme: &'a Theme, players: u32, window_size: (u32, u32)) -> Self {
-        let scale = Scale::new(players, theme.background_size(), window_size, theme.geometry().block_size());
+        let scale = Scale::new(
+            players,
+            theme.background_size(),
+            window_size,
+            theme.geometry().block_size(),
+        );
         let (theme_width, theme_height) = theme.background_size();
         let bg_source_snip = Rect::new(0, 0, theme_width, theme_height);
         let board_rect = theme.board_snip();
         let board_source_snip = Rect::new(0, 0, board_rect.width(), board_rect.height());
         let player_themes = (0..players)
-            .map(|pid| ThemedPlayer::new(pid + 1, &theme, scale))
+            .map(|pid| ThemedPlayer::new(pid + 1, theme, scale))
             .collect::<Vec<ThemedPlayer>>();
         Self {
             theme,
@@ -128,17 +133,18 @@ impl<'a> ThemeContext<'a> {
             .map_err(|e| e.to_string())?;
         fade_buffer.set_blend_mode(BlendMode::Blend);
 
-
         let current = match game_config.themes {
             MatchThemes::All | MatchThemes::GameBoy => 0,
             MatchThemes::Nes => 1,
             MatchThemes::Snes => 2,
-            MatchThemes::Modern => 3
+            MatchThemes::Modern => 3,
         };
 
         Ok(Self {
             current,
-            themes: all_themes.all().iter()
+            themes: all_themes
+                .all()
+                .iter()
                 .map(|theme| ScaledTheme::new(theme, game_config.players, window_size))
                 .collect(),
             fade_buffer,
@@ -164,11 +170,7 @@ impl<'a> ThemeContext<'a> {
     }
 
     pub fn theme(&self) -> &Theme<'a> {
-        &self.themes[self.current].theme
-    }
-
-    pub fn scale(&self) -> &Scale {
-        &self.themes[self.current].scale
+        self.themes[self.current].theme
     }
 
     pub fn player_line_snip(&self, player: u32, j: u32) -> Rect {
@@ -177,21 +179,27 @@ impl<'a> ThemeContext<'a> {
         theme.scale.scale_and_offset_rect(
             theme.theme.geometry().line_snip(j),
             player.board_snip.x(),
-            player.board_snip.y()
+            player.board_snip.y(),
         )
     }
 
     pub fn player_mino_snips(&self, player: u32, minos: Minos) -> [Rect; 4] {
         let theme = &self.themes[self.current];
         let player = theme.player_themes.get(player as usize - 1).unwrap();
-        theme.theme.geometry().mino_rects(minos)
-            .map(|r| theme.scale.scale_and_offset_rect(
-                r, player.board_snip.x(), player.board_snip.y()))
+        theme.theme.geometry().mino_rects(minos).map(|r| {
+            theme
+                .scale
+                .scale_and_offset_rect(r, player.board_snip.x(), player.board_snip.y())
+        })
     }
 
     pub fn player_board_snip(&self, player: u32) -> Rect {
         let theme = &self.themes[self.current];
-        theme.player_themes.get(player as usize - 1).unwrap().board_snip
+        theme
+            .player_themes
+            .get(player as usize - 1)
+            .unwrap()
+            .board_snip
     }
 
     pub fn current(&self) -> &ScaledTheme {
@@ -241,10 +249,11 @@ impl<'a> ThemeContext<'a> {
                 TextureMode::PlayerBoard(pid) => {
                     let (offset_x, offset_y) = offsets[*pid as usize - 1];
                     let player = current.player_themes[*pid as usize - 1];
-                    let dst =
-                        current
-                            .scale
-                            .offset_proportional_to_block_size(player.board_snip, offset_x, offset_y);
+                    let dst = current.scale.offset_proportional_to_block_size(
+                        player.board_snip,
+                        offset_x,
+                        offset_y,
+                    );
                     canvas.copy(texture, current.board_source_snip, dst)?;
                 }
             }

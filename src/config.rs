@@ -1,13 +1,13 @@
+use crate::build_info::APP_NAME;
 use crate::game::random::RandomMode;
 use crate::game_input::GameInputKey;
 use crate::menu_input::MenuInputKey;
-use crate::theme::game_boy::GameBoyPalette;
 use sdl2::keyboard::Keycode;
 use sdl2::mixer::MAX_VOLUME;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-pub const APP_CONFIG_ROOT: &str = "axle-h.rustic-tetris";
+pub const APP_CONFIG_ROOT: &str = APP_NAME;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VideoMode {
@@ -21,7 +21,6 @@ pub struct Config {
     pub video: VideoConfig,
     pub audio: AudioConfig,
     pub input: InputConfig,
-    pub theme: ThemeConfig,
     pub game: GameplayConfig,
 }
 
@@ -155,11 +154,6 @@ pub struct VideoConfig {
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub struct ThemeConfig {
-    pub game_boy_palette: GameBoyPalette,
-}
-
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct GameplayConfig {
     pub random_mode: RandomMode,
     pub min_garbage_per_hole: u32,
@@ -203,9 +197,6 @@ impl Default for Config {
                 quit: Keycode::Escape,
                 next_theme: Keycode::F2,
             },
-            theme: ThemeConfig {
-                game_boy_palette: GameBoyPalette::GameBoyLight,
-            },
             game: GameplayConfig {
                 random_mode: RandomMode::Bag,
                 min_garbage_per_hole: 10,
@@ -245,7 +236,7 @@ pub enum MatchThemes {
     GameBoy,
     Nes,
     Snes,
-    Modern
+    Modern,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -253,7 +244,7 @@ pub struct GameConfig {
     pub players: u32,
     pub level: u32,
     pub rules: MatchRules,
-    pub themes: MatchThemes
+    pub themes: MatchThemes,
 }
 
 impl GameConfig {
@@ -262,7 +253,7 @@ impl GameConfig {
             players,
             level,
             rules,
-            themes
+            themes,
         }
     }
 }

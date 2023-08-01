@@ -155,14 +155,7 @@ mod tests {
         // chunk into 3 bags of 7 shapes (arrays make it easier for creating the sets)
         let bags: Vec<[TetrominoShape; 7]> = next_n(&mut random, 21)
             .chunks(7)
-            .map(|chunk| {
-                chunk
-                    .iter()
-                    .copied()
-                    .collect::<Vec<TetrominoShape>>()
-                    .try_into()
-                    .unwrap()
-            })
+            .map(|chunk| chunk.to_vec().try_into().unwrap())
             .collect();
 
         // each bag should not be in same order

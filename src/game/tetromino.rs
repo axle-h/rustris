@@ -1,9 +1,11 @@
 use super::geometry::{Point, Rotation};
+#[allow(unused_imports)]
 use bitflags::{bitflags, Flags};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub enum TetrominoShape {
     /// XXXX
+    #[default]
     I,
     /// XX
     /// XX
@@ -25,16 +27,15 @@ pub enum TetrominoShape {
     L,
 }
 
-impl Default for TetrominoShape {
-    fn default() -> Self {
-        TetrominoShape::I
-    }
-}
-
 impl TetrominoShape {
     pub const ALL: [TetrominoShape; 7] = [
-        TetrominoShape::I, TetrominoShape::O, TetrominoShape::T, TetrominoShape::S,
-        TetrominoShape::Z, TetrominoShape::J, TetrominoShape::L
+        TetrominoShape::I,
+        TetrominoShape::O,
+        TetrominoShape::T,
+        TetrominoShape::S,
+        TetrominoShape::Z,
+        TetrominoShape::J,
+        TetrominoShape::L,
     ];
 
     pub fn meta(&self) -> &TetrominoMeta {
@@ -172,7 +173,7 @@ const fn perimeter(minos: [u8; 4]) -> MinoPerimeter {
     result[1] = Perimeter::from_bits_truncate(minos[1]);
     result[2] = Perimeter::from_bits_truncate(minos[2]);
     result[3] = Perimeter::from_bits_truncate(minos[3]);
-    return result;
+    result
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -235,13 +236,9 @@ impl TetrominoMeta {
     pub fn normal_minos(&self) -> Minos {
         let normal_offset = Point::new(
             self.minos.iter().map(|p| p.x).min().unwrap(),
-            self.minos.iter().map(|p| p.y).min().unwrap()
+            self.minos.iter().map(|p| p.y).min().unwrap(),
         );
-        return self.minos.map(|p| p - normal_offset)
-    }
-
-    pub fn minos(&self) -> Minos {
-        self.minos
+        self.minos.map(|p| p - normal_offset)
     }
 
     pub fn perimeter(&self) -> MinoPerimeter {
@@ -344,7 +341,12 @@ const S: TetrominoMeta = TetrominoMeta {
         Perimeter::Top.bits() | Perimeter::Left.bits(),
         Perimeter::Top.bits() | Perimeter::Right.bits() | Perimeter::Bottom.bits(),
     ]),
-    outside_corners: [Corner::None, Corner::TopLeft, Corner::BottomRight, Corner::None],
+    outside_corners: [
+        Corner::None,
+        Corner::TopLeft,
+        Corner::BottomRight,
+        Corner::None,
+    ],
     bounding_box: 3,
 };
 
@@ -363,7 +365,12 @@ const T: TetrominoMeta = TetrominoMeta {
         Perimeter::Top.bits() | Perimeter::Right.bits() | Perimeter::Bottom.bits(),
         Perimeter::Top.bits() | Perimeter::Right.bits() | Perimeter::Left.bits(),
     ]),
-    outside_corners: [Corner::None, Corner::from_bits_truncate(Corner::TopLeft.bits() | Corner::TopRight.bits()), Corner::None, Corner::None],
+    outside_corners: [
+        Corner::None,
+        Corner::from_bits_truncate(Corner::TopLeft.bits() | Corner::TopRight.bits()),
+        Corner::None,
+        Corner::None,
+    ],
     bounding_box: 3,
 };
 
@@ -382,7 +389,12 @@ const Z: TetrominoMeta = TetrominoMeta {
         Perimeter::Top.bits() | Perimeter::Bottom.bits() | Perimeter::Left.bits(),
         Perimeter::Top.bits() | Perimeter::Right.bits(),
     ]),
-    outside_corners: [Corner::TopRight, Corner::None, Corner::None, Corner::BottomLeft],
+    outside_corners: [
+        Corner::TopRight,
+        Corner::None,
+        Corner::None,
+        Corner::BottomLeft,
+    ],
     bounding_box: 3,
 };
 
@@ -599,11 +611,14 @@ mod tests {
 
     #[test]
     fn normal_minos() {
-        assert_eq!(TetrominoShape::I.meta().normal_minos(), [
-            Point::new(0, 0),
-            Point::new(1, 0),
-            Point::new(2, 0),
-            Point::new(3, 0),
-        ]);
+        assert_eq!(
+            TetrominoShape::I.meta().normal_minos(),
+            [
+                Point::new(0, 0),
+                Point::new(1, 0),
+                Point::new(2, 0),
+                Point::new(3, 0),
+            ]
+        );
     }
 }

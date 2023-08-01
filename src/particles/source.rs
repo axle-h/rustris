@@ -1,15 +1,15 @@
-use std::cmp::min;
-use std::time::Duration;
-use rand::{Rng, thread_rng};
-use rand::rngs::ThreadRng;
-use sdl2::pixels::Color;
 use crate::particles::color::ParticleColor;
-use crate::particles::geometry::{Vec2D, RectF};
+use crate::particles::geometry::{RectF, Vec2D};
 use crate::particles::meta::ParticleSprite;
 use crate::particles::particle::{Particle, ParticleGroup, ParticleWave};
 use crate::particles::quantity::{ProbabilityTable, VariableQuantity};
+use rand::rngs::ThreadRng;
+use rand::{thread_rng, Rng};
+
+use std::time::Duration;
 
 #[derive(Clone, Debug, PartialEq)]
+#[allow(dead_code)]
 pub enum ParticlePositionSource {
     /// All particles are emitted from one point
     Static(Vec2D),
@@ -20,10 +20,11 @@ pub enum ParticlePositionSource {
     /// Emitted randomly within a rectangle
     Rect(RectF),
 
-    Lattice(Vec<Vec2D>)
+    Lattice(Vec<Vec2D>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum ParticleModulation {
     /// All available particles are emitted as soon as possible
     Cascade,
@@ -39,7 +40,7 @@ pub enum ParticleModulation {
 enum ParticleSourceState {
     Complete,
     Emit,
-    Delay(Duration)
+    Delay(Duration),
 }
 
 #[derive(Debug, Clone)]
@@ -53,26 +54,41 @@ pub struct ParticleProperties {
 
 impl ParticleProperties {
     pub fn new<C, S, R>(sprites: &[ParticleSprite], color: C, size: S, angular_velocity: R) -> Self
-    where C : Into<VariableQuantity<ParticleColor>>,
-          S : Into<VariableQuantity<f64>>,
-          R : Into<VariableQuantity<f64>> {
+    where
+        C: Into<VariableQuantity<ParticleColor>>,
+        S: Into<VariableQuantity<f64>>,
+        R: Into<VariableQuantity<f64>>,
+    {
         assert!(!sprites.is_empty());
-        Self { rng: thread_rng(), sprites: sprites.to_vec(), color: color.into(), size: size.into(), angular_velocity: angular_velocity.into() }
+        Self {
+            rng: thread_rng(),
+            sprites: sprites.to_vec(),
+            color: color.into(),
+            size: size.into(),
+            angular_velocity: angular_velocity.into(),
+        }
     }
 
     pub fn simple<S>(sprites: &[ParticleSprite], size: S) -> Self
-        where S : Into<VariableQuantity<f64>> {
+    where
+        S: Into<VariableQuantity<f64>>,
+    {
         assert!(!sprites.is_empty());
         Self::new(sprites, ParticleColor::WHITE, size, 0.0)
     }
 
-    pub fn angular_velocity<R : Into<VariableQuantity<f64>>>(mut self, value: R) -> Self {
+    pub fn angular_velocity<R: Into<VariableQuantity<f64>>>(mut self, value: R) -> Self {
         self.angular_velocity = value.into();
         self
     }
 
     pub fn default() -> Self {
-        Self::new(&[ParticleSprite::Circle05], ParticleColor::WHITE, (1.0, 0.0), 0.0)
+        Self::new(
+            &[ParticleSprite::Circle05],
+            ParticleColor::WHITE,
+            (1.0, 0.0),
+            0.0,
+        )
     }
 
     pub fn next_sprite(&mut self) -> &ParticleSprite {
@@ -81,7 +97,8 @@ impl ParticleProperties {
         } else {
             let index = self.rng.gen_range(0..self.sprites.len());
             self.sprites.get(index)
-        }.unwrap()
+        }
+        .unwrap()
     }
 }
 
@@ -104,7 +121,7 @@ pub struct RandomParticleSource {
     acceleration: VariableQuantity<Vec2D>,
     alpha: VariableQuantity<f64>,
     orbit: Option<Vec2D>,
-    properties: ProbabilityTable<ParticleProperties>
+    properties: ProbabilityTable<ParticleProperties>,
 }
 
 impl ParticleSource for RandomParticleSource {
@@ -119,37 +136,43 @@ impl ParticleSource for RandomParticleSource {
         let emit_particles = match self.modulation {
             ParticleModulation::Cascade => self.cascade(max_particles),
             ParticleModulation::CascadeLimit { count } => self.cascade(count),
-            ParticleModulation::Constant { count, step } => self.constant(count, step, delta_time)
-        }.min(max_particles);
+            ParticleModulation::Constant { count, step } => self.constant(count, step, delta_time),
+        }
+        .min(max_particles);
 
         if emit_particles == 0 {
             return vec![];
         }
 
         let particles = match &self.position_source {
-            ParticlePositionSource::Lattice(points) => points.iter().take(emit_particles as usize).copied().collect::<Vec<Vec2D>>(),
-            ParticlePositionSource::RandomCascade(rect) => {
+            ParticlePositionSource::Lattice(points) => points
+                .iter()
+                .take(emit_particles as usize)
+                .copied()
+                .collect::<Vec<Vec2D>>(),
+            ParticlePositionSource::RandomCascade(_rect) => {
                 let point = self.next_position();
                 (0..emit_particles).map(|_| point).collect()
-            },
-            _ => (0..emit_particles).map(|_| self.next_position()).collect()
-        }.into_iter().map(|p| self.next_particle(p)).collect();
+            }
+            _ => (0..emit_particles).map(|_| self.next_position()).collect(),
+        }
+        .into_iter()
+        .map(|p| self.next_particle(p))
+        .collect();
 
-        vec![
-            ParticleGroup::new(
-                self.anchor_for.map(|d| d.as_secs_f64()),
-                self.fade_in.map(|d| d.as_secs_f64()),
-                self.fade_out,
-                self.orbit,
-                particles,
-            )
-        ]
+        vec![ParticleGroup::new(
+            self.anchor_for.map(|d| d.as_secs_f64()),
+            self.fade_in.map(|d| d.as_secs_f64()),
+            self.fade_out,
+            self.orbit,
+            particles,
+        )]
     }
 }
 
 // todo trait this out so I can have an aggregate particle source
 impl RandomParticleSource {
-    pub fn new(position_source: ParticlePositionSource, modulation: ParticleModulation) -> Self  {
+    pub fn new(position_source: ParticlePositionSource, modulation: ParticleModulation) -> Self {
         Self {
             state: ParticleSourceState::Emit,
             position_source,
@@ -173,12 +196,14 @@ impl RandomParticleSource {
         color: C,
         velocity: V,
         fade_out: L,
-        alpha: A
+        alpha: A,
     ) -> Self
-    where C : Into<VariableQuantity<ParticleColor>>,
-          V : Into<VariableQuantity<Vec2D>>,
-          L : Into<VariableQuantity<f64>>,
-          A : Into<VariableQuantity<f64>> {
+    where
+        C: Into<VariableQuantity<ParticleColor>>,
+        V: Into<VariableQuantity<Vec2D>>,
+        L: Into<VariableQuantity<f64>>,
+        A: Into<VariableQuantity<f64>>,
+    {
         Self {
             state: ParticleSourceState::Emit,
             position_source,
@@ -192,7 +217,12 @@ impl RandomParticleSource {
             acceleration: VariableQuantity::new(Vec2D::ZERO, Vec2D::ZERO),
             alpha: alpha.into(),
             orbit: None,
-            properties: ProbabilityTable::identity(ParticleProperties::new(&[sprite], color, 1.0, 0.0))
+            properties: ProbabilityTable::identity(ParticleProperties::new(
+                &[sprite],
+                color,
+                1.0,
+                0.0,
+            )),
         }
     }
 
@@ -205,22 +235,29 @@ impl RandomParticleSource {
         self
     }
 
-    pub fn with_alpha<A : Into<VariableQuantity<f64>>>(mut self, value: A) -> Self {
+    pub fn with_alpha<A: Into<VariableQuantity<f64>>>(mut self, value: A) -> Self {
         self.alpha = value.into();
         self
     }
 
     pub fn with_static_properties<C, S, R>(
-        mut self,
+        self,
         sprite: ParticleSprite,
         color: C,
         size: S,
-        angular_velocity: R
+        angular_velocity: R,
     ) -> Self
-    where C : Into<VariableQuantity<ParticleColor>>,
-          S : Into<VariableQuantity<f64>>,
-          R : Into<VariableQuantity<f64>> {
-        self.with_properties(ProbabilityTable::identity(ParticleProperties::new(&[sprite], color, size, angular_velocity)))
+    where
+        C: Into<VariableQuantity<ParticleColor>>,
+        S: Into<VariableQuantity<f64>>,
+        R: Into<VariableQuantity<f64>>,
+    {
+        self.with_properties(ProbabilityTable::identity(ParticleProperties::new(
+            &[sprite],
+            color,
+            size,
+            angular_velocity,
+        )))
     }
 
     pub fn with_properties(mut self, properties: ProbabilityTable<ParticleProperties>) -> Self {
@@ -238,13 +275,13 @@ impl RandomParticleSource {
         self
     }
 
-    pub fn with_fade_out<L : Into<VariableQuantity<f64>>>(mut self, value: L) -> Self {
+    pub fn with_fade_out<L: Into<VariableQuantity<f64>>>(mut self, value: L) -> Self {
         self.fade_out = true;
         self.lifetime_secs = Some(value.into());
         self
     }
 
-    pub fn with_velocity<V : Into<VariableQuantity<Vec2D>>>(mut self, value: V) -> Self {
+    pub fn with_velocity<V: Into<VariableQuantity<Vec2D>>>(mut self, value: V) -> Self {
         self.velocity = value.into();
         self
     }
@@ -254,12 +291,12 @@ impl RandomParticleSource {
         self
     }
 
-    pub fn with_orbit<O : Into<Vec2D>>(mut self, value: O) -> Self {
+    pub fn with_orbit<O: Into<Vec2D>>(mut self, value: O) -> Self {
         self.orbit = Some(value.into());
         self
     }
 
-    pub fn with_pulse<P : Into<VariableQuantity<ParticleWave>>>(mut self, value: P) -> Self {
+    pub fn with_pulse<P: Into<VariableQuantity<ParticleWave>>>(mut self, value: P) -> Self {
         self.pulse = Some(value.into());
         self
     }
@@ -274,15 +311,16 @@ impl RandomParticleSource {
             ParticleSourceState::Emit => {
                 self.state = ParticleSourceState::Delay(step);
                 count
-            },
+            }
             ParticleSourceState::Delay(delay) => {
                 let delta_time_nanos = delay.as_nanos() as u64 + delta_time.as_nanos() as u64;
                 let step_nanos = step.as_nanos() as u64;
                 let n_steps = delta_time_nanos / step_nanos;
-                self.state = ParticleSourceState::Delay(Duration::from_nanos(delta_time_nanos % step_nanos));
+                self.state =
+                    ParticleSourceState::Delay(Duration::from_nanos(delta_time_nanos % step_nanos));
                 n_steps as u32 * count
-            },
-            _ => unreachable!()
+            }
+            _ => unreachable!(),
         }
     }
 
@@ -293,33 +331,37 @@ impl RandomParticleSource {
                 let x = rect.x() + rect.width() * rand::random::<f64>();
                 let y = rect.y() + rect.height() * rand::random::<f64>();
                 Vec2D::new(x, y)
-            },
-            _ => unreachable!()
+            }
+            _ => unreachable!(),
         }
     }
 
     fn next_particle(&mut self, position: Vec2D) -> Particle {
         let max_alpha = self.alpha.next();
-        let mut properties = self.properties.next_mut();
+        let properties = self.properties.next_mut();
         Particle::new(
             position,
             self.velocity.next(),
             self.acceleration.next(),
             max_alpha,
-            if self.fade_in.is_some() { 0.0 } else { max_alpha },
+            if self.fade_in.is_some() {
+                0.0
+            } else {
+                max_alpha
+            },
             self.pulse.as_mut().map(|p| p.next()),
             properties.color.next(),
             self.lifetime_secs.as_mut().map(|l| l.next()),
             *properties.next_sprite(),
             properties.size.next(),
-            properties.angular_velocity.next()
+            properties.angular_velocity.next(),
         )
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct AggregateParticleSource {
-    sources: Vec<RandomParticleSource>
+    sources: Vec<RandomParticleSource>,
 }
 
 impl AggregateParticleSource {
@@ -350,6 +392,6 @@ impl ParticleSource for AggregateParticleSource {
                 result.push(group)
             }
         }
-        return result;
+        result
     }
 }

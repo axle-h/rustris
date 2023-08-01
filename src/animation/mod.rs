@@ -3,15 +3,15 @@ pub mod game_over;
 pub mod hard_drop;
 pub mod impact;
 
-use std::time::Duration;
 use crate::particles::prescribed::PrescribedParticles;
+use std::time::Duration;
 
 #[derive(Clone, Copy, Debug)]
 pub enum TextureAnimate {
     Nothing,
     SetAlpha,
     FillAlphaRectangle { width: f64 },
-    EmitParticles(PrescribedParticles)
+    EmitParticles(PrescribedParticles),
 }
 
 impl TextureAnimate {

@@ -63,7 +63,7 @@ pub enum GameState {
     SpawnGarbage {
         duration: Duration,
         next_shape: TetrominoShape,
-        spawned: u32
+        spawned: u32,
     },
 }
 
@@ -283,7 +283,7 @@ impl Game {
                 },
                 Some(GameEvent::ReceivedGarbage {
                     player: self.player,
-                    lines: self.garbage_buffer
+                    lines: self.garbage_buffer,
                 }),
             );
         }
@@ -294,12 +294,21 @@ impl Game {
 
         self.skip_next_spawn_delay = false;
         if let Some(minos) = self.board.try_spawn_tetromino(shape) {
-            (GameState::Fall(Duration::ZERO), Some(GameEvent::Spawn { player: self.player, minos }))
+            (
+                GameState::Fall(Duration::ZERO),
+                Some(GameEvent::Spawn {
+                    player: self.player,
+                    minos,
+                }),
+            )
         } else {
             // cannot spawn a tetromino is a game over event
             (
                 GameState::GameOver,
-                Some(GameEvent::GameOver { player: self.player, condition: GameOverCondition::BlockOut }),
+                Some(GameEvent::GameOver {
+                    player: self.player,
+                    condition: GameOverCondition::BlockOut,
+                }),
             )
         }
     }
@@ -351,7 +360,10 @@ impl Game {
             // maybe unlock hold
             match self.hold {
                 Some(HoldState { locked, shape }) if locked => {
-                    self.hold = Some(HoldState { locked: false, shape });
+                    self.hold = Some(HoldState {
+                        locked: false,
+                        shape,
+                    });
                 }
                 _ => {}
             }
@@ -359,14 +371,20 @@ impl Game {
             if is_lock_out {
                 (
                     GameState::GameOver,
-                    Some(GameEvent::GameOver { player: self.player, condition: GameOverCondition::LockOut }),
+                    Some(GameEvent::GameOver {
+                        player: self.player,
+                        condition: GameOverCondition::LockOut,
+                    }),
                 )
             } else {
-                (GameState::Pattern, Some(GameEvent::Lock {
-                    player: self.player,
-                    minos: minos.expect("we must've locked"),
-                    hard_or_soft_dropped: hard_dropped || self.soft_drop,
-                }))
+                (
+                    GameState::Pattern,
+                    Some(GameEvent::Lock {
+                        player: self.player,
+                        minos: minos.expect("we must've locked"),
+                        hard_or_soft_dropped: hard_dropped || self.soft_drop,
+                    }),
+                )
             }
         } else {
             // otherwise must've moved over empty space so start a new fall
@@ -384,7 +402,7 @@ impl Game {
         self.board.destroy(lines);
         (
             GameState::Spawn(Duration::ZERO, self.random.next()),
-            self.update_score_and_get_garbage_to_send(lines)
+            self.update_score_and_get_garbage_to_send(lines),
         )
     }
 
@@ -392,14 +410,14 @@ impl Game {
         &mut self,
         duration: Duration,
         next_shape: TetrominoShape,
-        spawned: u32
+        spawned: u32,
     ) -> (GameState, Option<GameEvent>) {
         if duration < GARBAGE_WAIT {
             return (
                 GameState::SpawnGarbage {
                     duration,
                     next_shape,
-                    spawned
+                    spawned,
                 },
                 None,
             );
@@ -412,12 +430,18 @@ impl Game {
             // TopOut
             return (
                 GameState::GameOver,
-                Some(GameEvent::GameOver { player: self.player, condition: GameOverCondition::TopOut }),
+                Some(GameEvent::GameOver {
+                    player: self.player,
+                    condition: GameOverCondition::TopOut,
+                }),
             );
         }
 
         self.garbage_buffer -= 1;
-        let event = GameEvent::ReceivedGarbageLine { player: self.player, line: spawned };
+        let event = GameEvent::ReceivedGarbageLine {
+            player: self.player,
+            line: spawned,
+        };
 
         if self.garbage_buffer == 0 {
             self.skip_next_spawn_delay = true;
@@ -427,7 +451,7 @@ impl Game {
                 GameState::SpawnGarbage {
                     duration: Duration::ZERO,
                     next_shape,
-                    spawned: spawned + 1
+                    spawned: spawned + 1,
                 },
                 Some(event),
             )

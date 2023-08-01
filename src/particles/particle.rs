@@ -6,12 +6,15 @@ use crate::particles::meta::ParticleSprite;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ParticleWave {
     magnitude: f64,
-    frequency: f64
+    frequency: f64,
 }
 
 impl ParticleWave {
     pub fn new(magnitude: f64, frequency: f64) -> Self {
-        Self { magnitude, frequency }
+        Self {
+            magnitude,
+            frequency,
+        }
     }
 
     pub fn next(&self, lifetime: f64) -> f64 {
@@ -38,7 +41,7 @@ pub struct Particle {
     sprite: ParticleSprite,
     size: f64,
     rotation: f64,
-    angular_velocity: f64
+    angular_velocity: f64,
 }
 
 impl Particle {
@@ -53,19 +56,40 @@ impl Particle {
         time_to_live: Option<f64>,
         sprite: ParticleSprite,
         size: f64,
-        angular_velocity: f64
+        angular_velocity: f64,
     ) -> Self {
-        Self { position, velocity, acceleration, max_alpha, alpha, pulse, color, time_to_live, sprite, size, rotation: 0.0, angular_velocity }
+        Self {
+            position,
+            velocity,
+            acceleration,
+            max_alpha,
+            alpha,
+            pulse,
+            color,
+            time_to_live,
+            sprite,
+            size,
+            rotation: 0.0,
+            angular_velocity,
+        }
     }
 
     /// checks if the particle is out of bounds (0-1) and trajectory will not bring it back
     pub fn is_escaped(&self) -> bool {
         const THRESHOLD_MAX: f64 = 1.05;
         const THRESHOLD_MIN: f64 = -0.05;
-        (self.position.x() > THRESHOLD_MAX && self.velocity.x() >= 0.0 && self.acceleration.x() >= 0.0)
-            || (self.position.x() < THRESHOLD_MIN && self.velocity.x() <= 0.0 && self.acceleration.x() <= 0.0)
-            || (self.position.y() > THRESHOLD_MAX && self.velocity.y() >= 0.0 && self.acceleration.y() >= 0.0)
-            || (self.position.y() < THRESHOLD_MIN && self.velocity.y() <= 0.0 && self.acceleration.y() <= 0.0)
+        (self.position.x() > THRESHOLD_MAX
+            && self.velocity.x() >= 0.0
+            && self.acceleration.x() >= 0.0)
+            || (self.position.x() < THRESHOLD_MIN
+                && self.velocity.x() <= 0.0
+                && self.acceleration.x() <= 0.0)
+            || (self.position.y() > THRESHOLD_MAX
+                && self.velocity.y() >= 0.0
+                && self.acceleration.y() >= 0.0)
+            || (self.position.y() < THRESHOLD_MIN
+                && self.velocity.y() <= 0.0
+                && self.acceleration.y() <= 0.0)
     }
 
     pub fn update(&mut self, delta_time: f64) {
@@ -101,12 +125,25 @@ pub struct ParticleGroup {
     fade_in: Option<f64>,
     fade_out: bool,
     orbit: Option<Vec2D>,
-    particles: Vec<Particle>
+    particles: Vec<Particle>,
 }
 
 impl ParticleGroup {
-    pub fn new(anchor_for: Option<f64>, fade_in: Option<f64>, fade_out: bool, orbit: Option<Vec2D>, particles: Vec<Particle>) -> Self {
-        Self { lifetime: 0.0, anchor_for, fade_in, fade_out, orbit, particles }
+    pub fn new(
+        anchor_for: Option<f64>,
+        fade_in: Option<f64>,
+        fade_out: bool,
+        orbit: Option<Vec2D>,
+        particles: Vec<Particle>,
+    ) -> Self {
+        Self {
+            lifetime: 0.0,
+            anchor_for,
+            fade_in,
+            fade_out,
+            orbit,
+            particles,
+        }
     }
 
     pub fn update_life(&mut self, delta_time: f64) {
@@ -174,7 +211,6 @@ impl ParticleGroup {
                 }
             }
         }
-
         // fade out
         else if self.fade_out {
             for particle in self.particles.iter_mut() {
@@ -188,12 +224,14 @@ impl ParticleGroup {
             // pulse
             if let Some(pulse) = particle.pulse.as_ref() {
                 let pulse_magnitude = pulse.next(self.lifetime);
-                particle.alpha = (particle.alpha + pulse_magnitude).min(particle.max_alpha).max(0.0);
+                particle.alpha = (particle.alpha + pulse_magnitude)
+                    .min(particle.max_alpha)
+                    .max(0.0);
             }
         }
     }
 
     pub fn particles(&self) -> &[Particle] {
-        &self.particles.as_slice()
+        self.particles.as_slice()
     }
 }

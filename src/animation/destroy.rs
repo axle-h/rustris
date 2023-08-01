@@ -2,9 +2,9 @@ use super::TextureAnimation;
 use crate::animation::TextureAnimate;
 use crate::game::board::DestroyLines;
 
-use std::time::Duration;
-use sdl2::pixels::Color;
 use crate::particles::prescribed::PrescribedParticles;
+use sdl2::pixels::Color;
+use std::time::Duration;
 
 const MAX_FLASHES: u32 = 3;
 const FLASH_DURATION: Duration = Duration::from_millis(250);
@@ -15,7 +15,7 @@ const PARTICLE_FADE_IN_DURATION: Duration = Duration::from_millis(750);
 pub enum DestroyAnimationType {
     Flash,
     Sweep,
-    Particles { color: Color }
+    Particles { color: Color },
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -30,7 +30,7 @@ impl State {
         match self {
             State::Finished => State::Finished,
             State::Nothing(duration) => State::Nothing(duration + delta),
-            State::Animate(duration, animate) => State::Animate(duration + delta, animate)
+            State::Animate(duration, animate) => State::Animate(duration + delta, animate),
         }
     }
 }
@@ -42,7 +42,7 @@ fn first_state(destroy_type: DestroyAnimationType) -> State {
             Duration::ZERO,
             TextureAnimate::FillAlphaRectangle { width: 0.0 },
         ),
-        DestroyAnimationType::Particles { .. } => State::Nothing(Duration::ZERO)
+        DestroyAnimationType::Particles { .. } => State::Nothing(Duration::ZERO),
     }
 }
 
@@ -95,12 +95,17 @@ impl DestroyAnimation {
         match self.state {
             State::Nothing(_) if self.count == 0 => {
                 self.count += 1;
-                let particles = PrescribedParticles::FadeInLatticeBurstAndFall { fade_in: PARTICLE_FADE_IN_DURATION, color };
+                let particles = PrescribedParticles::FadeInLatticeBurstAndFall {
+                    fade_in: PARTICLE_FADE_IN_DURATION,
+                    color,
+                };
                 State::Animate(Duration::ZERO, TextureAnimate::EmitParticles(particles))
-            },
+            }
             State::Animate(_, _) => State::Nothing(Duration::ZERO),
-            State::Nothing(duration) if duration < PARTICLE_FADE_IN_DURATION => State::Nothing(duration),
-            _ => State::Finished
+            State::Nothing(duration) if duration < PARTICLE_FADE_IN_DURATION => {
+                State::Nothing(duration)
+            }
+            _ => State::Finished,
         }
     }
 
@@ -120,7 +125,7 @@ impl TextureAnimation for DestroyAnimation {
         let state = match self.state {
             State::Finished => State::Finished,
             State::Nothing(duration) => self.next(duration),
-            State::Animate(duration, _) => self.next(duration)
+            State::Animate(duration, _) => self.next(duration),
         };
         self.state = state;
         self.current()

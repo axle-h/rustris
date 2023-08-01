@@ -1,39 +1,35 @@
-use std::cmp::min;
-use std::rc::Rc;
-use std::time::Duration;
+use crate::particles::source::ParticleSource;
 use particle::{Particle, ParticleGroup};
-use crate::particles::color::ParticleColor;
-use crate::particles::geometry::Vec2D;
-use crate::particles::quantity::VariableQuantity;
-use crate::particles::source::{ParticlePositionSource, ParticleSource};
 
+use std::time::Duration;
+
+pub mod color;
 pub mod geometry;
-pub mod source;
+mod meta;
+pub mod particle;
+pub mod prescribed;
+pub mod quantity;
 pub mod render;
 pub mod scale;
-pub mod quantity;
-pub mod prescribed;
-pub mod color;
-pub mod particle;
-mod meta;
+pub mod source;
 
 pub struct Particles {
     particles: Vec<ParticleGroup>,
     sources: Vec<Box<dyn ParticleSource>>,
-    max_particles: usize
+    max_particles: usize,
 }
 
 impl Particles {
     pub fn new(max_particles: usize) -> Self {
-        Self { sources: vec![], particles: vec![], max_particles }
+        Self {
+            sources: vec![],
+            particles: vec![],
+            max_particles,
+        }
     }
 
     pub fn particles(&self) -> Vec<&Particle> {
         self.particles.iter().flat_map(|g| g.particles()).collect()
-    }
-
-    pub fn add_source(&mut self, source: Box<dyn ParticleSource>) {
-        self.sources.push(source);
     }
 
     pub fn update(&mut self, delta: Duration) {
@@ -94,8 +90,4 @@ impl Particles {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-
-}
+mod tests {}

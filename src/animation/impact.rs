@@ -30,15 +30,15 @@ impl ImpactAnimation {
     pub fn impact(&mut self) {
         self.state = match self.state {
             State::Rest | State::Return { .. } => State::Impacted {
-                acceleration: ACCELERATION as f64,
-                speed: SPEED as f64,
+                acceleration: ACCELERATION,
+                speed: SPEED,
             },
             State::Impacted {
                 acceleration,
                 speed,
             } => State::Impacted {
-                acceleration: acceleration + ACCELERATION as f64,
-                speed: speed + SPEED as f64,
+                acceleration: acceleration + ACCELERATION,
+                speed: speed + SPEED,
             },
         };
     }

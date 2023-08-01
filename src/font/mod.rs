@@ -1,28 +1,37 @@
-use std::collections::HashMap;
 use sdl2::pixels::Color;
 use sdl2::render::{BlendMode, Texture, TextureCreator};
+use sdl2::rwops::RWops;
 use sdl2::ttf::{Font, Sdl2TtfContext};
 use sdl2::video::WindowContext;
+
+const FONT_ROBOTO_REGULAR: &[u8] = include_bytes!("Roboto-Regular.ttf");
+const FONT_ROBOTO_BOLD: &[u8] = include_bytes!("Roboto-Bold.ttf");
+const FONT_ROBOTO_MONO_REGULAR: &[u8] = include_bytes!("RobotoMono-Regular.ttf");
+const FONT_HANDJET: &[u8] = include_bytes!("Handjet.ttf");
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum FontType {
     Normal,
     Bold,
     Mono,
-    Handjet
+    Handjet,
 }
 
 impl FontType {
-    pub fn load<'ttf>(&self, ttf: &'ttf Sdl2TtfContext, size: u32) -> Result<Font<'ttf, 'ttf>, String> {
-        ttf.load_font(self.path(), size as u16)
+    pub fn load<'ttf>(
+        &self,
+        ttf: &'ttf Sdl2TtfContext,
+        size: u32,
+    ) -> Result<Font<'ttf, 'ttf>, String> {
+        ttf.load_font_from_rwops(RWops::from_bytes(self.bytes())?, size as u16)
     }
 
-    fn path(&self) -> &str {
+    fn bytes(&self) -> &'static [u8] {
         match self {
-            FontType::Normal => "resource/font/Roboto-Regular.ttf",
-            FontType::Bold => "resource/font/Roboto-Bold.ttf",
-            FontType::Mono => "resource/font/RobotoMono-Regular.ttf",
-            FontType::Handjet => "resource/font/Handjet.ttf"
+            FontType::Normal => FONT_ROBOTO_REGULAR,
+            FontType::Bold => FONT_ROBOTO_BOLD,
+            FontType::Mono => FONT_ROBOTO_MONO_REGULAR,
+            FontType::Handjet => FONT_HANDJET,
         }
     }
 }
@@ -30,7 +39,7 @@ impl FontType {
 pub struct FontTexture<'a> {
     pub texture: Texture<'a>,
     pub width: u32,
-    pub height: u32
+    pub height: u32,
 }
 
 impl<'a> FontTexture<'a> {
@@ -38,7 +47,7 @@ impl<'a> FontTexture<'a> {
         font: &Font,
         texture_creator: &'a TextureCreator<WindowContext>,
         text: &str,
-        color: Color
+        color: Color,
     ) -> Result<Self, String> {
         let surface = font
             .render(text)
@@ -53,7 +62,7 @@ impl<'a> FontTexture<'a> {
         Ok(Self {
             texture,
             width: query.width,
-            height: query.height
+            height: query.height,
         })
     }
 
@@ -61,7 +70,7 @@ impl<'a> FontTexture<'a> {
         font: &Font,
         texture_creator: &'a TextureCreator<WindowContext>,
         ch: char,
-        color: Color
+        color: Color,
     ) -> Result<Self, String> {
         let surface = font
             .render_char(ch)
@@ -76,7 +85,7 @@ impl<'a> FontTexture<'a> {
         Ok(Self {
             texture,
             width: query.width,
-            height: query.height
+            height: query.height,
         })
     }
 }

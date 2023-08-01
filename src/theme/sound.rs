@@ -1,13 +1,15 @@
-use crate::config::{AudioConfig, Config};
-use sdl2::mixer::{Chunk, Music};
-use rand::{Rng, thread_rng};
-use rand::prelude::ThreadRng;
+use crate::config::AudioConfig;
 use crate::event::GameEvent;
 
-pub fn load_sound(theme: &str, name: &str, config: Config) -> Result<Chunk, String> {
-    let mut chunk = Chunk::from_file(format!("./resource/{}/{}.ogg", theme, name))
-        .map_err(|e| format!("Cannot load sound file {}: {:?}", name, e))?;
-    chunk.set_volume(config.audio.effects_volume());
+use rand::{thread_rng, Rng};
+use sdl2::get_error;
+use sdl2::mixer::{Chunk, Music};
+use sdl2::rwops::RWops;
+use sdl2::sys::mixer;
+
+pub fn load_sound(buffer: &[u8], config: AudioConfig) -> Result<Chunk, String> {
+    let mut chunk = chunk_from_buffer(buffer)?;
+    chunk.set_volume(config.effects_volume());
     Ok(chunk)
 }
 
@@ -17,97 +19,100 @@ pub fn play_sound(chunk: &Chunk) -> Result<(), String> {
     Ok(())
 }
 
+fn chunk_from_buffer(buffer: &[u8]) -> Result<Chunk, String> {
+    let raw = unsafe { mixer::Mix_LoadWAV_RW(RWops::from_bytes(buffer)?.raw(), 0) };
+    if raw.is_null() {
+        Err(get_error())
+    } else {
+        Ok(Chunk { raw, owned: true })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SoundThemeOptions {
-    theme_name: String,
     config: AudioConfig,
-    music: String,
-    move_tetromino: String,
-    rotate: String,
-    lock: String,
-    send_garbage: Vec<String>,
-    clear: [String; 4], // single, double, triple, tetris
-    level_up: String,
-    game_over: String,
-    pause: String,
-    victory: String,
-    stack_drop: Option<String>,
-    hard_drop: Option<String>,
-    hold: Option<String>
+    music: &'static [u8],
+    move_tetromino: &'static [u8],
+    rotate: &'static [u8],
+    lock: &'static [u8],
+    send_garbage: Vec<&'static [u8]>,
+    clear: [&'static [u8]; 4], // single, double, triple, tetris
+    level_up: &'static [u8],
+    game_over: &'static [u8],
+    pause: &'static [u8],
+    victory: &'static [u8],
+    stack_drop: Option<&'static [u8]>,
+    hard_drop: Option<&'static [u8]>,
+    hold: Option<&'static [u8]>,
 }
 
 impl SoundThemeOptions {
-    pub fn default(theme_name: &str, config: AudioConfig) -> Self {
-        let line_clear = "line-clear".to_string();
+    pub fn default(
+        config: AudioConfig,
+        music: &'static [u8],
+        move_tetromino: &'static [u8],
+        rotate: &'static [u8],
+        lock: &'static [u8],
+        send_garbage: &'static [u8],
+        clear: [&'static [u8]; 4], // single, double, triple, tetris
+        level_up: &'static [u8],
+        game_over: &'static [u8],
+        pause: &'static [u8],
+        victory: &'static [u8],
+    ) -> Self {
         Self {
-            theme_name: theme_name.to_string(),
             config,
-            music: "music".to_string(),
-            move_tetromino: "move".to_string(),
-            rotate: "rotate".to_string(),
-            lock: "lock".to_string(),
-            send_garbage: vec!["send-garbage".to_string()],
-            clear: [
-                // same sound for all line clears by default
-                line_clear.clone(), line_clear.clone(), line_clear,
-                "tetris".to_string()
-            ],
-            level_up: "level-up".to_string(),
-            game_over: "game-over".to_string(),
-            pause: "pause".to_string(),
-            victory: "victory".to_string(),
-            stack_drop: Some("stack-drop".to_string()),
+            music,
+            move_tetromino,
+            rotate,
+            lock,
+            send_garbage: vec![send_garbage],
+            clear,
+            level_up,
+            game_over,
+            pause,
+            victory,
+            stack_drop: None,
             hard_drop: None,
-            hold: None
+            hold: None,
         }
     }
 
-    pub fn without_stack_drop(mut self) -> Self {
-        self.stack_drop = None;
+    pub fn with_stack_drop(mut self, value: &'static [u8]) -> Self {
+        self.stack_drop = Some(value);
         self
     }
 
-    pub fn with_distinct_clear(mut self) -> Self {
-        self.clear[0] = "single".to_string();
-        self.clear[1] = "double".to_string();
-        self.clear[2] = "triple".to_string();
+    pub fn with_hard_drop(mut self, value: &'static [u8]) -> Self {
+        self.hard_drop = Some(value);
         self
     }
 
-    pub fn with_hard_drop(mut self) -> Self {
-        self.hard_drop = Some("hard-drop".to_string());
+    pub fn with_hold(mut self, value: &'static [u8]) -> Self {
+        self.hold = Some(value);
         self
     }
 
-    pub fn with_hold(mut self) -> Self {
-        self.hold = Some("hold".to_string());
-        self
-    }
-
-    pub fn with_alt_send_garbage(mut self) -> Self {
-        self.send_garbage.push("send-garbage-alt".to_string());
+    pub fn with_alt_send_garbage(mut self, value: &'static [u8]) -> Self {
+        self.send_garbage.push(value);
         self
     }
 
     fn load_music<'a>(&self) -> Result<Music<'a>, String> {
-        let file = format!("./resource/{}/{}.ogg", self.theme_name, self.music);
-        Music::from_file(file)
+        Music::from_static_bytes(self.music)
     }
 
-    fn load_sound(&self, name: String) -> Result<Chunk, String> {
-        let mut chunk = Chunk::from_file(format!("./resource/{}/{}.ogg", self.theme_name, name))
-            .map_err(|e| format!("Cannot load sound file {}: {:?}", name, e))?;
-        chunk.set_volume(self.config.effects_volume());
-        Ok(chunk)
+    fn load_sound(&self, buffer: &[u8]) -> Result<Chunk, String> {
+        load_sound(buffer, self.config)
     }
 
-    pub fn build<'a>(self) -> Result<SoundTheme<'a>, String> {
+    pub fn build(self) -> Result<SoundTheme, String> {
         SoundTheme::new(self)
     }
 }
 
-pub struct SoundTheme<'a> {
-    music: Music<'a>,
+pub struct SoundTheme {
+    music: Music<'static>,
     move_tetromino: Chunk,
     rotate: Chunk,
     lock: Chunk,
@@ -119,10 +124,10 @@ pub struct SoundTheme<'a> {
     victory: Chunk,
     stack_drop: Option<Chunk>,
     hard_drop: Option<Chunk>,
-    hold: Option<Chunk>
+    hold: Option<Chunk>,
 }
 
-impl<'a> SoundTheme<'a> {
+impl SoundTheme {
     pub fn new(options: SoundThemeOptions) -> Result<Self, String> {
         let o = options.clone();
         Ok(Self {
@@ -130,7 +135,11 @@ impl<'a> SoundTheme<'a> {
             move_tetromino: options.load_sound(o.move_tetromino)?,
             rotate: options.load_sound(o.rotate)?,
             lock: options.load_sound(o.lock)?,
-            send_garbage: o.send_garbage.into_iter().map(|p| options.load_sound(p).unwrap()).collect(),
+            send_garbage: o
+                .send_garbage
+                .into_iter()
+                .map(|p| options.load_sound(p).unwrap())
+                .collect(),
             clear: o.clear.map(|p| options.load_sound(p).unwrap()),
             level_up: options.load_sound(o.level_up)?,
             game_over: options.load_sound(o.game_over)?,
@@ -179,17 +188,19 @@ impl<'a> SoundTheme<'a> {
                 if self.send_garbage.len() == 1 {
                     play_sound(&self.send_garbage[0])
                 } else {
-                    let sound = &self.send_garbage[thread_rng().gen_range(0..self.send_garbage.len())];
+                    let sound =
+                        &self.send_garbage[thread_rng().gen_range(0..self.send_garbage.len())];
                     play_sound(sound)
                 }
-            },
+            }
             GameEvent::GameOver { .. } => play_sound(&self.game_over),
             GameEvent::Victory { .. } => play_sound(&self.victory),
             GameEvent::Paused => play_sound(&self.pause),
-            GameEvent::HardDrop { .. } if self.hard_drop.is_some() => play_sound(self.hard_drop.as_ref().unwrap()),
+            GameEvent::HardDrop { .. } if self.hard_drop.is_some() => {
+                play_sound(self.hard_drop.as_ref().unwrap())
+            }
             GameEvent::Hold if self.hold.is_some() => play_sound(self.hold.as_ref().unwrap()),
             _ => Ok(()),
         }
     }
 }
-

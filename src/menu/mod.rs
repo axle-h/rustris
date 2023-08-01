@@ -1,10 +1,9 @@
-use crate::config::Config;
-use crate::menu_input::MenuInputKey;
-use crate::theme::sound::{load_sound, play_sound};
+pub mod sound;
 
+use crate::menu_input::MenuInputKey;
 use crate::build_info::BUILD_INFO;
+use crate::font::FontType;
 use sdl2::image::LoadTexture;
-use sdl2::mixer::Chunk;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
@@ -12,7 +11,8 @@ use sdl2::ttf::{Font, Sdl2TtfContext};
 use sdl2::video::WindowContext;
 use std::cmp::max;
 use std::collections::HashMap;
-use crate::font::FontType;
+
+const CARET_FILE: &[u8] = include_bytes!("caret.png");
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MenuAction<'a> {
@@ -38,7 +38,6 @@ pub struct Menu<'a> {
     caret_size: u32,
     name_width: u32,
     row_height: u32,
-    menu_sound: Chunk,
 }
 
 fn maybe_add_texture<'a>(
@@ -70,13 +69,12 @@ impl<'a> Menu<'a> {
         menu_items: Vec<MenuItem<'a>>,
         ttf: &Sdl2TtfContext,
         texture_creator: &'a TextureCreator<WindowContext>,
-        config: Config,
         window_size: (u32, u32),
-        title_text: &str
+        title_text: &str,
     ) -> Result<Self, String> {
         assert!(!menu_items.is_empty());
 
-        let mut caret_texture = texture_creator.load_texture("resource/menu/caret.png")?;
+        let mut caret_texture = texture_creator.load_texture_bytes(CARET_FILE)?;
         caret_texture.set_blend_mode(BlendMode::Blend);
 
         let mut string_textures: HashMap<&'a str, Texture<'a>> = HashMap::new();
@@ -147,9 +145,15 @@ impl<'a> Menu<'a> {
             .blended(Color::WHITE)
             .map_err(|e| e.to_string())?;
         let title_rect = Rect::from_center(
-            Rect::new(0, vertical_gutter as i32, window_width, title_surface.height()).center(),
+            Rect::new(
+                0,
+                vertical_gutter as i32,
+                window_width,
+                title_surface.height(),
+            )
+            .center(),
             title_surface.width(),
-            title_surface.height()
+            title_surface.height(),
         );
         let mut title_texture = texture_creator
             .create_texture_from_surface(title_surface)
@@ -172,13 +176,8 @@ impl<'a> Menu<'a> {
             caret_size,
             name_width: max_name_width,
             row_height,
-            menu_sound: load_sound("menu", "chime", config)?
         };
         Ok(result)
-    }
-
-    pub fn play_sound(&self) -> Result<(), String> {
-        play_sound(&self.menu_sound)
     }
 
     pub fn up(&mut self) {

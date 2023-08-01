@@ -148,7 +148,7 @@ impl Board {
         true
     }
 
-    fn mutate_tetromino<F : FnMut(&mut Tetromino)>(&mut self, mut f: F) {
+    fn mutate_tetromino<F: FnMut(&mut Tetromino)>(&mut self, mut f: F) {
         // remove from board
         for p in self.tetromino.unwrap().minos() {
             self.set_block(p, BlockState::Empty);
@@ -317,9 +317,7 @@ impl Board {
 
     /// Locks the current tetromino
     pub fn lock(&mut self) -> Option<Minos> {
-        if self.tetromino.is_none() {
-            return None;
-        }
+        self.tetromino?;
         let tetromino = self.tetromino.unwrap();
         for (id, p) in tetromino.minos().into_iter().enumerate() {
             self.set_block(

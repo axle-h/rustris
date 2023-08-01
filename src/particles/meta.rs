@@ -1,34 +1,79 @@
-use sdl2::rect::Rect;
-use strum_macros::EnumIter;
 use crate::game::tetromino::TetrominoShape;
 use crate::particles::meta::ParticleSprite::*;
 use crate::theme::ThemeName;
+use sdl2::rect::Rect;
+use strum_macros::EnumIter;
 
 const PARTICLE_SPRITE_SIZE: u32 = 512;
 
 fn snip(i: i32, j: i32) -> Rect {
-    Rect::new(i * PARTICLE_SPRITE_SIZE as i32, j * PARTICLE_SPRITE_SIZE as i32, PARTICLE_SPRITE_SIZE, PARTICLE_SPRITE_SIZE)
+    Rect::new(
+        i * PARTICLE_SPRITE_SIZE as i32,
+        j * PARTICLE_SPRITE_SIZE as i32,
+        PARTICLE_SPRITE_SIZE,
+        PARTICLE_SPRITE_SIZE,
+    )
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, EnumIter)]
 pub enum ParticleSprite {
-    Circle01, Circle02, Circle03, Circle04, Circle05,
-    Dirt01, Dirt02, Dirt03,
-    Fire01, Fire02,
+    Circle01,
+    Circle02,
+    Circle03,
+    Circle04,
+    Circle05,
+    Dirt01,
+    Dirt02,
+    Dirt03,
+    Fire01,
+    Fire02,
     Flare01,
-    Light01, Light02, Light03,
-    Magic01, Magic02, Magic03, Magic04, Magic05,
-    Scorch01, Scorch02, Scorch03,
-    Smoke01, Smoke02, Smoke03, Smoke04, Smoke05, Smoke06, Smoke07, Smoke08, Smoke09, Smoke10,
-    Spark01, Spark02, Spark03, Spark04,
-    Star01, Star02, Star03, Star04, Star05, Star06, Star07, Star08, Star09,
-    Symbol01, Symbol02,
-    Twirl01, Twirl02, Twirl03,
-    Tetromino(ThemeName, TetrominoShape)
+    Light01,
+    Light02,
+    Light03,
+    Magic01,
+    Magic02,
+    Magic03,
+    Magic04,
+    Magic05,
+    Scorch01,
+    Scorch02,
+    Scorch03,
+    Smoke01,
+    Smoke02,
+    Smoke03,
+    Smoke04,
+    Smoke05,
+    Smoke06,
+    Smoke07,
+    Smoke08,
+    Smoke09,
+    Smoke10,
+    Spark01,
+    Spark02,
+    Spark03,
+    Spark04,
+    Star01,
+    Star02,
+    Star03,
+    Star04,
+    Star05,
+    Star06,
+    Star07,
+    Star08,
+    Star09,
+    Symbol01,
+    Symbol02,
+    Twirl01,
+    Twirl02,
+    Twirl03,
+    Tetromino(ThemeName, TetrominoShape),
 }
 
 impl ParticleSprite {
-    pub const STARS: [ParticleSprite; 9] = [Star01, Star02, Star03, Star04, Star05, Star06, Star07, Star08, Star09];
+    pub const STARS: [ParticleSprite; 9] = [
+        Star01, Star02, Star03, Star04, Star05, Star06, Star07, Star08, Star09,
+    ];
     pub const HOLLOW_CIRCLES: [ParticleSprite; 4] = [Circle01, Circle02, Circle03, Circle04];
     pub const MODERN_TETROMINOS: [ParticleSprite; 7] = [
         Tetromino(ThemeName::Modern, TetrominoShape::I),
@@ -37,7 +82,7 @@ impl ParticleSprite {
         Tetromino(ThemeName::Modern, TetrominoShape::S),
         Tetromino(ThemeName::Modern, TetrominoShape::Z),
         Tetromino(ThemeName::Modern, TetrominoShape::J),
-        Tetromino(ThemeName::Modern, TetrominoShape::L)
+        Tetromino(ThemeName::Modern, TetrominoShape::L),
     ];
     pub const NES_TETROMINOS: [ParticleSprite; 7] = [
         Tetromino(ThemeName::Nes, TetrominoShape::I),
@@ -46,7 +91,7 @@ impl ParticleSprite {
         Tetromino(ThemeName::Nes, TetrominoShape::S),
         Tetromino(ThemeName::Nes, TetrominoShape::Z),
         Tetromino(ThemeName::Nes, TetrominoShape::J),
-        Tetromino(ThemeName::Nes, TetrominoShape::L)
+        Tetromino(ThemeName::Nes, TetrominoShape::L),
     ];
     pub const SNES_TETROMINOS: [ParticleSprite; 7] = [
         Tetromino(ThemeName::Snes, TetrominoShape::I),
@@ -55,7 +100,7 @@ impl ParticleSprite {
         Tetromino(ThemeName::Snes, TetrominoShape::S),
         Tetromino(ThemeName::Snes, TetrominoShape::Z),
         Tetromino(ThemeName::Snes, TetrominoShape::J),
-        Tetromino(ThemeName::Snes, TetrominoShape::L)
+        Tetromino(ThemeName::Snes, TetrominoShape::L),
     ];
 
     pub fn snip(&self) -> Option<Rect> {
@@ -110,7 +155,7 @@ impl ParticleSprite {
             Symbol02 => Some(snip(4, 6)),
             Twirl01 => Some(snip(5, 6)),
             Twirl02 => Some(snip(6, 6)),
-            Tetromino(_, _) => None
+            Tetromino(_, _) => None,
         }
     }
 }

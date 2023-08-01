@@ -12,8 +12,8 @@ use crate::high_score::NewHighScore;
 
 use rand::Rng;
 
-use std::time::Duration;
 use crate::particles::prescribed::{PlayerParticleTarget, PlayerTargetedParticles};
+use std::time::Duration;
 
 pub struct Player {
     pub player: u32,
@@ -75,26 +75,33 @@ impl Player {
         match &self.destroy_animation {
             None => vec![],
             Some(animation) => match animation.current() {
-                Some(animate) if !animate.is_emit_particles() => compact_destroy_lines(animation.lines())
-                    .into_iter()
-                    .map(|y| (y, animate))
-                    .collect(),
+                Some(animate) if !animate.is_emit_particles() => {
+                    compact_destroy_lines(animation.lines())
+                        .into_iter()
+                        .map(|y| (y, animate))
+                        .collect()
+                }
                 _ => vec![],
             },
         }
     }
 
     pub fn current_particles(&self) -> Option<PlayerTargetedParticles> {
-        self.destroy_animation.as_ref()
-            .map(|animation| animation.current().map(|animate| (animate, animation.lines())))
-            .flatten()
-            .map(|(animate, lines)| if let TextureAnimate::EmitParticles(particles) = animate {
-                let target = PlayerParticleTarget::DestroyedLines(lines);
-                Some(particles.into_targeted(self.player, target))
-            } else {
-                None
+        self.destroy_animation
+            .as_ref()
+            .and_then(|animation| {
+                animation
+                    .current()
+                    .map(|animate| (animate, animation.lines()))
             })
-            .flatten()
+            .and_then(|(animate, lines)| {
+                if let TextureAnimate::EmitParticles(particles) = animate {
+                    let target = PlayerParticleTarget::DestroyedLines(lines);
+                    Some(particles.into_targeted(self.player, target))
+                } else {
+                    None
+                }
+            })
     }
 }
 
@@ -102,7 +109,7 @@ impl Player {
 pub enum MatchState {
     Normal,
     Paused,
-    GameOver { high_score: Option<NewHighScore> }
+    GameOver { high_score: Option<NewHighScore> },
 }
 
 impl MatchState {

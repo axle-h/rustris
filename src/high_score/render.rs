@@ -1,14 +1,14 @@
 use crate::high_score::table::{HighScore, HighScoreTable};
 
-use sdl2::pixels::Color;
-use sdl2::rect::{Point, Rect};
-use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
-use sdl2::ttf::{Font, GlyphMetrics, Sdl2TtfContext};
-use sdl2::video::WindowContext;
-use std::cmp::{max, min};
 use crate::event::HighScoreEntryEvent;
 use crate::font::{FontTexture, FontType};
 use crate::high_score::NewHighScore;
+use sdl2::pixels::Color;
+use sdl2::rect::{Point, Rect};
+use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
+use sdl2::ttf::{Font, Sdl2TtfContext};
+use sdl2::video::WindowContext;
+use std::cmp::min;
 
 const NAME_CHARACTERS: usize = 5;
 const CARET_HEIGHT: u32 = 2;
@@ -16,20 +16,18 @@ const FONT_COLOR: Color = Color::WHITE;
 
 fn char_carets(font: &Font, text: &str) -> Result<Vec<Rect>, String> {
     let mut char_carets = vec![];
-    for (i, char) in text.chars().into_iter().enumerate() {
+    for (i, char) in text.chars().enumerate() {
         let x = if i == 0 {
             0
         } else {
-            let (width, _) = font.size_of(&text[..i])
-                .map_err(|e| e.to_string())?;
+            let (width, _) = font.size_of(&text[..i]).map_err(|e| e.to_string())?;
             width + 1
         };
-        let (width, height) = font.size_of_char(char)
-            .map_err(|e| e.to_string())?;
+        let (width, height) = font.size_of_char(char).map_err(|e| e.to_string())?;
         let rect = Rect::new(x as i32, height as i32 - 2, width - 1, CARET_HEIGHT);
         char_carets.push(rect);
     }
-    return Ok(char_carets);
+    Ok(char_carets)
 }
 
 struct HighScoreTableRow<'a> {
@@ -39,18 +37,25 @@ struct HighScoreTableRow<'a> {
 }
 
 impl<'a> HighScoreTableRow<'a> {
-    fn new(font: &Font, texture_creator: &'a TextureCreator<WindowContext>, ordinal: &str, name: &str, score: &str) -> Result<Self, String> {
-        Ok(
-            Self {
-                ordinal: FontTexture::from_string(font, texture_creator, ordinal, FONT_COLOR)?,
-                name: FontTexture::from_string(font, texture_creator, name, FONT_COLOR)?,
-                score: FontTexture::from_string(font, texture_creator, score, FONT_COLOR)?,
-            }
-        )
+    fn new(
+        font: &Font,
+        texture_creator: &'a TextureCreator<WindowContext>,
+        ordinal: &str,
+        name: &str,
+        score: &str,
+    ) -> Result<Self, String> {
+        Ok(Self {
+            ordinal: FontTexture::from_string(font, texture_creator, ordinal, FONT_COLOR)?,
+            name: FontTexture::from_string(font, texture_creator, name, FONT_COLOR)?,
+            score: FontTexture::from_string(font, texture_creator, score, FONT_COLOR)?,
+        })
     }
 
     fn height(&self) -> u32 {
-        self.ordinal.height.max(self.name.height).max(self.score.height)
+        self.ordinal
+            .height
+            .max(self.name.height)
+            .max(self.score.height)
     }
 }
 
@@ -59,7 +64,7 @@ struct Entry {
     high_score: NewHighScore,
     name: [char; NAME_CHARACTERS],
     current_char: usize,
-    char_carets: Vec<Rect>
+    char_carets: Vec<Rect>,
 }
 
 impl Entry {
@@ -69,13 +74,13 @@ impl Entry {
             high_score,
             name: [' '; NAME_CHARACTERS],
             current_char: 0,
-            char_carets:  char_carets(font, &" ".repeat(NAME_CHARACTERS))?
+            char_carets: char_carets(font, &" ".repeat(NAME_CHARACTERS))?,
         })
     }
 
     fn update_carets(&mut self, font: &Font) -> Result<(), String> {
         self.char_carets = char_carets(font, &self.name())?;
-        return Ok(())
+        Ok(())
     }
 
     fn current_caret(&self) -> Rect {
@@ -158,7 +163,7 @@ pub struct HighScoreRender<'a, 'ttf> {
     width: u32,
     rect: Rect,
     entry: Option<Entry>,
-    font: Font<'ttf, 'ttf>
+    font: Font<'ttf, 'ttf>,
 }
 
 /// TODO music
@@ -168,33 +173,44 @@ impl<'a, 'ttf> HighScoreRender<'a, 'ttf> {
         ttf: &'ttf Sdl2TtfContext,
         texture_creator: &'a TextureCreator<WindowContext>,
         (window_width, window_height): (u32, u32),
-        new_high_score: Option<NewHighScore>
+        new_high_score: Option<NewHighScore>,
     ) -> Result<Self, String> {
         let font_size = window_width / 32;
         let font_header = FontType::Bold.load(ttf, font_size)?;
         let font_body = FontType::Mono.load(ttf, font_size)?;
         let font_title = FontType::Handjet.load(ttf, window_width / 24)?;
 
-        let (table, entry) = if new_high_score.is_some() {
-            let new_high_score = new_high_score.unwrap();
-            let score_index = table.try_get_score_index(new_high_score.score).expect("not a high score");
-            let mut new_table = table.clone();
-            new_table.add_high_score(HighScore::new(&" ".repeat(NAME_CHARACTERS), new_high_score.score));
-            (new_table, Some(Entry::new(score_index, new_high_score, &font_body)?))
+        let (table, entry) = if let Some(new_high_score) = new_high_score {
+            let score_index = table
+                .try_get_score_index(new_high_score.score)
+                .expect("not a high score");
+            let mut new_table = table;
+            new_table.add_high_score(HighScore::new(
+                &" ".repeat(NAME_CHARACTERS),
+                new_high_score.score,
+            ));
+            (
+                new_table,
+                Some(Entry::new(score_index, new_high_score, &font_body)?),
+            )
         } else {
             (table, None)
         };
 
-        let mut rows = vec![
-            HighScoreTableRow::new(&font_header, texture_creator, "#", "Name", "Score")?
-        ];
+        let mut rows = vec![HighScoreTableRow::new(
+            &font_header,
+            texture_creator,
+            "#",
+            "Name",
+            "Score",
+        )?];
         for (i, row) in table.entries().iter().enumerate() {
             rows.push(HighScoreTableRow::new(
                 &font_body,
                 texture_creator,
                 &(i + 1).to_string(),
                 &row.name,
-                &row.score.to_string()
+                &row.score.to_string(),
             )?);
         }
 
@@ -222,9 +238,18 @@ impl<'a, 'ttf> HighScoreRender<'a, 'ttf> {
             height,
         );
 
-        let title_text = entry.as_ref().map(|e| e.title_text()).unwrap_or("High Scores".to_string());
-        let title = FontTexture::from_string(&font_title, texture_creator, &title_text, FONT_COLOR)?;
-        let title_rect = Rect::new((window_width - title.width) as i32 / 2, padding as i32, title.width, title.height);
+        let title_text = entry
+            .as_ref()
+            .map(|e| e.title_text())
+            .unwrap_or("High Scores".to_string());
+        let title =
+            FontTexture::from_string(&font_title, texture_creator, &title_text, FONT_COLOR)?;
+        let title_rect = Rect::new(
+            (window_width - title.width) as i32 / 2,
+            padding as i32,
+            title.width,
+            title.height,
+        );
 
         Ok(Self {
             texture_creator,
@@ -238,7 +263,7 @@ impl<'a, 'ttf> HighScoreRender<'a, 'ttf> {
             ordinal_column_width,
             rect,
             entry,
-            font: font_body
+            font: font_body,
         })
     }
 
@@ -259,15 +284,27 @@ impl<'a, 'ttf> HighScoreRender<'a, 'ttf> {
     }
 
     pub fn new_entry(&self) -> Option<HighScore> {
-        self.entry.as_ref().expect("no new high score").to_high_score()
+        self.entry
+            .as_ref()
+            .expect("no new high score")
+            .to_high_score()
     }
 
-    fn update_entry_texture<F : FnMut(&mut Entry) -> Option<HighScoreEntryEvent>>(&mut self, mut f: F) -> Option<HighScoreEntryEvent> {
+    fn update_entry_texture<F: FnMut(&mut Entry) -> Option<HighScoreEntryEvent>>(
+        &mut self,
+        mut f: F,
+    ) -> Option<HighScoreEntryEvent> {
         let entry = self.entry.as_mut().expect("no new high score");
         let result = f(entry);
         if result.is_some() {
             let row = self.rows.get_mut(entry.ordinal + 1).unwrap();
-            row.name = FontTexture::from_string(&self.font, self.texture_creator, &entry.name(), FONT_COLOR).unwrap();
+            row.name = FontTexture::from_string(
+                &self.font,
+                self.texture_creator,
+                &entry.name(),
+                FONT_COLOR,
+            )
+            .unwrap();
             entry.update_carets(&self.font).unwrap();
         }
         result
@@ -300,12 +337,13 @@ impl<'a, 'ttf> HighScoreRender<'a, 'ttf> {
                         if entry.ordinal + 1 == i {
                             c.set_draw_color(Color::RED);
                             let caret = entry.current_caret();
-                            c.fill_rect(
-                                Rect::new(
-                                    name_rect.x() + caret.x(), name_rect.y() + caret.y(),
-                                    caret.width(), caret.height()
-                                )
-                            ).unwrap();
+                            c.fill_rect(Rect::new(
+                                name_rect.x() + caret.x(),
+                                name_rect.y() + caret.y(),
+                                caret.width(),
+                                caret.height(),
+                            ))
+                            .unwrap();
                         }
                     }
 

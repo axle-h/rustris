@@ -19,7 +19,7 @@ pub enum GameEvent {
     Lock {
         player: u32,
         minos: Minos,
-        hard_or_soft_dropped: bool
+        hard_or_soft_dropped: bool,
     },
     Destroy(DestroyLines),
     Destroyed {
@@ -31,17 +31,22 @@ pub enum GameEvent {
     Hold,
     Paused,
     UnPaused,
-    GameOver { player: u32, condition: GameOverCondition },
-    Victory { player: u32 },
+    GameOver {
+        player: u32,
+        condition: GameOverCondition,
+    },
+    Victory {
+        player: u32,
+    },
     Quit,
     NextTheme,
     ReceivedGarbage {
         player: u32,
-        lines: u32
+        lines: u32,
     },
     ReceivedGarbageLine {
         player: u32,
-        line: u32
+        line: u32,
     },
 }
 

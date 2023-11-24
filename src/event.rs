@@ -39,6 +39,7 @@ pub enum GameEvent {
         player: u32,
     },
     Quit,
+    ReturnToMenu,
     NextTheme,
     ReceivedGarbage {
         player: u32,

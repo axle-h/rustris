@@ -88,7 +88,7 @@ impl InputConfig {
 
     pub fn game_map(&self) -> HashMap<Keycode, GameInputKey> {
         let mut result = HashMap::from([
-            (self.quit, GameInputKey::Quit),
+            (self.quit, GameInputKey::ReturnToMenu),
             (self.pause, GameInputKey::Pause),
             (self.next_theme, GameInputKey::NextTheme),
             (self.player1.move_left, GameInputKey::MoveLeft { player: 1 }),

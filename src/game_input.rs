@@ -17,6 +17,7 @@ pub enum GameInputKey {
     RotateAnticlockwise { player: u32 },
     Hold { player: u32 },
     Pause,
+    ReturnToMenu,
     Quit,
     NextTheme,
 }

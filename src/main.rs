@@ -75,6 +75,13 @@ enum MainMenuAction {
     Quit,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PostGameAction {
+    NewHighScore(NewHighScore),
+    ReturnToMenu,
+    Quit,
+}
+
 struct TetrisSdl {
     config: Config,
     _sdl: Sdl,
@@ -410,7 +417,7 @@ impl TetrisSdl {
         all_themes: &AllThemes,
         bg_particles: &mut ParticleRender,
         fg_particles: &mut ParticleRender,
-    ) -> Result<Option<NewHighScore>, String> {
+    ) -> Result<PostGameAction, String> {
         let texture_creator = self.canvas.texture_creator();
         let mut inputs = GameInputContext::new(self.config.input);
         let mut fixture = Match::new(self.game_config, self.config);
@@ -451,7 +458,7 @@ impl TetrisSdl {
         let mut max_level = 0;
         let mut frame_rate = FrameRate::new();
 
-        'game: loop {
+        loop {
             let delta = frame_rate.update()?;
 
             let mut to_emit_particles = vec![];
@@ -460,6 +467,7 @@ impl TetrisSdl {
             for hard_dropping_player in player_hard_drop_animations.keys() {
                 fixture.set_hard_dropping(*hard_dropping_player);
             }
+
             let events = inputs
                 .update(delta, self.event_pump.poll_iter())
                 .into_iter()
@@ -481,16 +489,18 @@ impl TetrisSdl {
                     GameInputKey::Hold { player } => fixture.mut_game(player, |g| g.hold()),
                     GameInputKey::Pause => match fixture.state() {
                         MatchState::Normal | MatchState::Paused => fixture.toggle_paused(),
-                        _ => Some(GameEvent::Quit),
+                        _ => None,
                     },
                     GameInputKey::Quit => Some(GameEvent::Quit),
+                    GameInputKey::ReturnToMenu => Some(GameEvent::ReturnToMenu),
                     GameInputKey::NextTheme => Some(GameEvent::NextTheme),
                 })
                 .collect::<Vec<GameEvent>>();
 
             for event in events.into_iter() {
                 match event {
-                    GameEvent::Quit => break 'game,
+                    GameEvent::Quit => return Ok(PostGameAction::Quit),
+                    GameEvent::ReturnToMenu => return Ok(PostGameAction::ReturnToMenu), // even if high score?!
                     GameEvent::Paused => sdl2::mixer::Music::pause(),
                     GameEvent::UnPaused => sdl2::mixer::Music::resume(),
                     GameEvent::NextTheme if !fixture.state().is_game_over() => {
@@ -551,7 +561,7 @@ impl TetrisSdl {
                     if let Some(high_score) = maybe_high_score {
                         // start high score entry
                         if game_over_done {
-                            return Ok(Some(high_score));
+                            return Ok(PostGameAction::NewHighScore(high_score));
                         }
                     }
                 }
@@ -739,48 +749,48 @@ impl TetrisSdl {
 
             self.canvas.present();
         }
-
-        Ok(None)
     }
 }
 
 fn main() -> Result<(), String> {
-    let mut tetris = TetrisSdl::new()?;
-    let texture_creator = tetris.canvas.texture_creator();
-    let (_, window_height) = tetris.canvas.window().size();
+    let mut rustris = TetrisSdl::new()?;
+    let texture_creator = rustris.canvas.texture_creator();
+    let (_, window_height) = rustris.canvas.window().size();
     let all_themes = AllThemes::new(
-        &mut tetris.canvas,
+        &mut rustris.canvas,
         &texture_creator,
-        &tetris.ttf,
-        tetris.config,
+        &rustris.ttf,
+        rustris.config,
         window_height,
     )?;
     let mut fg_particles = ParticleRender::new(
-        &mut tetris.canvas,
+        &mut rustris.canvas,
         Particles::new(MAX_PARTICLES_PER_PLAYER * MAX_PLAYERS as usize),
         &texture_creator,
-        tetris.particle_scale,
+        rustris.particle_scale,
         vec![],
     )?;
 
     let mut bg_particles = ParticleRender::new(
-        &mut tetris.canvas,
+        &mut rustris.canvas,
         Particles::new(MAX_BACKGROUND_PARTICLES),
         &texture_creator,
-        tetris.particle_scale,
+        rustris.particle_scale,
         all_themes.all(),
     )?;
 
     loop {
-        match tetris.main_menu(&mut bg_particles)? {
+        match rustris.main_menu(&mut bg_particles)? {
             MainMenuAction::Start => {
-                let maybe_high_score =
-                    tetris.game(&all_themes, &mut bg_particles, &mut fg_particles)?;
-                if let Some(high_score) = maybe_high_score {
-                    tetris.new_high_score(high_score, &mut bg_particles)?;
+                match rustris.game(&all_themes, &mut fg_particles, &mut bg_particles)? {
+                    PostGameAction::NewHighScore(high_score) => {
+                        rustris.new_high_score(high_score, &mut bg_particles)?
+                    }
+                    PostGameAction::ReturnToMenu => (),
+                    PostGameAction::Quit => return Ok(()),
                 }
             }
-            MainMenuAction::ViewHighScores => tetris.view_high_score(&mut bg_particles)?,
+            MainMenuAction::ViewHighScores => rustris.view_high_score(&mut bg_particles)?,
             MainMenuAction::Quit => break
         }
     }

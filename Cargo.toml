@@ -27,7 +27,7 @@ bitflags = "2.3.3"
 sdl2 = { version = "0.35", default-features = false, features = ["static-link","use-vcpkg","image","gfx","mixer","ttf"] }
 confy = { version = "0.5.1", default-features = false, features = ["yaml_conf"] }
 num-format = "0.4.4"
-strum = "0.25"
+strum = { version = "0.25", features = ["derive"] }
 strum_macros = "0.25"
 once_cell = "1.18.0"
 

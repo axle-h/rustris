@@ -15,6 +15,15 @@ cargo build --release
 
 All resources are embedded into the binary.
 
+### macOS
+
+The linker will fail to link SDL2 haptics. You will need to add the following to `~/.cargo/config.toml`:
+
+```toml
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-args=-weak_framework CoreHaptics"]
+```
+
 ## Config
 
 Config is stored in yaml:

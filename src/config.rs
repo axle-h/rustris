@@ -1,3 +1,4 @@
+use num_format::{Locale, ToFormattedString};
 use crate::build_info::APP_NAME;
 use crate::game::random::RandomMode;
 use crate::game_input::GameInputKey;
@@ -6,6 +7,7 @@ use sdl2::keyboard::Keycode;
 use sdl2::mixer::MAX_VOLUME;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use strum::IntoEnumIterator;
 
 pub const APP_CONFIG_ROOT: &str = APP_NAME;
 
@@ -224,19 +226,52 @@ pub enum MatchRules {
 }
 
 impl MatchRules {
+    pub const DEFAULT_LINE_SPRINT: Self = Self::LineSprint { lines: 40 };
+    pub const DEFAULT_SCORE_SPRINT: Self = Self::ScoreSprint { score: 10_000 };
+
+    pub const DEFAULT_MODES: [Self; 4] = [
+        Self::Battle,
+        Self::DEFAULT_LINE_SPRINT,
+        Self::DEFAULT_SCORE_SPRINT,
+        Self::Marathon
+    ];
+
     pub fn garbage_enabled(&self) -> bool {
         self == &MatchRules::Battle
     }
+
+    pub fn name(&self) -> String {
+        match self {
+            MatchRules::Battle => "battle".to_string(),
+            MatchRules::ScoreSprint { score } => format!("{} point sprint", score.to_formatted_string(&Locale::en)),
+            MatchRules::LineSprint { lines } => format!("{} line sprint", lines.to_formatted_string(&Locale::en)),
+            MatchRules::Marathon => "marathon".to_string()
+        }
+    }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::IntoStaticStr, strum::EnumIter, strum::EnumString)]
 pub enum MatchThemes {
     /// Run themes in order, switching at the next level
+    #[strum(serialize = "all")]
     All,
+    #[strum(serialize = "gameboy")]
     GameBoy,
+    #[strum(serialize = "nes")]
     Nes,
+    #[strum(serialize = "snes")]
     Snes,
+    #[strum(serialize = "modern")]
     Modern,
+}
+
+impl MatchThemes {
+    pub fn names() -> Vec<&'static str> {
+        Self::iter().map(|e| e.into()).collect()
+    }
+    pub fn count() -> usize {
+        Self::iter().filter(|i| *i as usize > 0).count()
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -255,6 +290,12 @@ impl GameConfig {
             rules,
             themes,
         }
+    }
+}
+
+impl Default for GameConfig {
+    fn default() -> Self {
+        Self::new(1, 0, MatchRules::Battle, MatchThemes::All)
     }
 }
 

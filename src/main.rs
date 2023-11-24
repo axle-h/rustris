@@ -28,7 +28,7 @@ use crate::event::{GameEvent, HighScoreEntryEvent};
 use crate::game_input::GameInputKey;
 use crate::high_score::render::HighScoreRender;
 use crate::high_score::table::HighScoreTable;
-use crate::menu::{Menu, MenuAction};
+use crate::menu::{Menu, MenuAction, MenuItem};
 use crate::menu_input::{MenuInputContext, MenuInputKey};
 use crate::player::MatchState;
 
@@ -58,6 +58,7 @@ use sdl2::ttf::Sdl2TtfContext;
 use sdl2::{AudioSubsystem, EventPump, Sdl};
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::str::FromStr;
 
 use crate::menu::sound::MenuSound;
 use theme_context::{PlayerTextures, TextureMode, ThemeContext};
@@ -69,8 +70,9 @@ const MAX_BACKGROUND_PARTICLES: usize = 100000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum MainMenuAction {
-    NewMatch { config: GameConfig },
+    Start,
     ViewHighScores,
+    Quit,
 }
 
 struct TetrisSdl {
@@ -83,6 +85,7 @@ struct TetrisSdl {
     _audio: AudioSubsystem,
     particle_scale: particles::scale::Scale,
     menu_sound: MenuSound,
+    game_config: GameConfig
 }
 
 impl TetrisSdl {
@@ -123,9 +126,11 @@ impl TetrisSdl {
         let mut window = window_builder
             .position_centered()
             .opengl()
-            .allow_highdpi()
             .build()
             .map_err(|e| e.to_string())?;
+
+        dbg!(window.drawable_size());
+        dbg!(window.size());
 
         window.set_icon(app_icon()?);
 
@@ -163,6 +168,7 @@ impl TetrisSdl {
             _audio: audio,
             particle_scale: particles::scale::Scale::new((width, height)),
             menu_sound,
+            game_config: Default::default(),
         })
     }
 
@@ -190,72 +196,49 @@ impl TetrisSdl {
         )
     }
 
-    pub fn main_menu(
-        &mut self,
-        game_config: Option<GameConfig>,
-        particles: &mut ParticleRender,
-    ) -> Result<Option<MainMenuAction>, String> {
+    pub fn main_menu(&mut self, particles: &mut ParticleRender) -> Result<MainMenuAction, String> {
+        const PLAYERS: &str = "players";
+        const THEMES: &str = "themes";
+        const MODE: &str = "mode";
+        const LEVEL: &str = "level";
+        const HIGH_SCORES: &str = "high scores";
+        const START: &str = "start";
+        const QUIT: &str = "quit";
+
         let texture_creator = self.canvas.texture_creator();
-        let mut game_config = match game_config {
-            None => GameConfig::new(1, 0, MatchRules::Battle, MatchThemes::All),
-            Some(config) => config,
-        };
         let inputs = MenuInputContext::new(self.config.input);
-        let menu_items = vec![
-            (
-                "players",
-                MenuAction::SelectList {
-                    items: vec!["1", "2"],
-                    current: game_config.players as usize - 1,
-                },
-            ),
-            (
-                "themes",
-                MenuAction::SelectList {
-                    items: vec!["all", "gameboy", "nes", "snes", "modern"],
-                    current: match game_config.themes {
-                        MatchThemes::All => 0,
-                        MatchThemes::GameBoy => 1,
-                        MatchThemes::Nes => 2,
-                        MatchThemes::Snes => 3,
-                        MatchThemes::Modern => 4,
-                    },
-                },
-            ),
-            (
-                "mode",
-                MenuAction::SelectList {
-                    items: vec![
-                        "battle",
-                        "40 line sprint",
-                        "10,000 point sprint",
-                        "marathon",
-                    ],
-                    current: match game_config.rules {
-                        MatchRules::Battle => 0,
-                        MatchRules::LineSprint { .. } => 1,
-                        MatchRules::ScoreSprint { .. } => 2,
-                        MatchRules::Marathon => 3,
-                    },
-                },
-            ),
-            (
-                "level",
-                MenuAction::SelectList {
-                    items: vec!["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
-                    current: game_config.level as usize,
-                },
-            ),
-            ("high scores", MenuAction::Select),
-            ("start", MenuAction::Select),
-            ("quit", MenuAction::Select),
-        ];
+        let modes = MatchRules::DEFAULT_MODES;
         let mut menu = Menu::new(
-            menu_items,
+            vec![
+                MenuItem::select_list(
+                    PLAYERS,
+                    vec!["1".to_string(), "2".to_string()],
+                    self.game_config.players as usize - 1,
+                ),
+                MenuItem::select_list(
+                    THEMES,
+                    MatchThemes::names().into_iter().map(|s| s.to_string()).collect(),
+                    self.game_config.themes as usize,
+                ),
+                MenuItem::select_list(
+                    MODE,
+                    modes.iter().map(|m| m.name()).collect(),
+                    modes.iter().position(|&m| m == self.game_config.rules).unwrap()
+                ),
+                MenuItem::select_list(
+                    LEVEL,
+                    (0..10).map(|i| i.to_string()).collect(),
+                    self.game_config.level as usize,
+                ),
+                MenuItem::select(HIGH_SCORES),
+                MenuItem::select(START),
+                MenuItem::select(QUIT),
+            ],
+            &mut self.canvas,
             &self.ttf,
             &texture_creator,
-            self.canvas.window().size(),
-            &APP_NAME.to_uppercase(),
+            APP_NAME.to_uppercase(),
+            None
         )?;
 
         particles.clear();
@@ -264,51 +247,38 @@ impl TetrisSdl {
         let mut frame_rate = FrameRate::new();
 
         self.menu_sound.play_main_menu_music()?;
-        'menu: loop {
+        loop {
             let delta = frame_rate.update()?;
 
-            let events = inputs.parse(self.event_pump.poll_iter());
-            if events.contains(&MenuInputKey::Quit) {
-                return Ok(None);
-            }
-            if events.contains(&MenuInputKey::Start) {
-                break 'menu;
-            }
-            if !events.is_empty() {
-                self.menu_sound.play_chime()?;
-            }
-
-            for key in events.into_iter() {
+            for key in inputs.parse(self.event_pump.poll_iter()).into_iter() {
+                if key == MenuInputKey::Quit {
+                    return Ok(MainMenuAction::Quit);
+                }
                 match menu.read_key(key) {
-                    None => {}
+                    None => match key {
+                        MenuInputKey::Start => {
+                            self.menu_sound.play_chime()?;
+                            return Ok(MainMenuAction::Start);
+                        }
+                        _ => {}
+                    },
                     Some((name, action)) => match name {
-                        "players" => game_config.players = action.parse::<u32>().unwrap(),
-                        "themes" => {
-                            game_config.themes = match action {
-                                "all" => MatchThemes::All,
-                                "gameboy" => MatchThemes::GameBoy,
-                                "nes" => MatchThemes::Nes,
-                                "snes" => MatchThemes::Snes,
-                                "modern" => MatchThemes::Modern,
-                                _ => unreachable!(),
-                            }
+                        PLAYERS => self.game_config.players = action.parse::<u32>().unwrap(),
+                        THEMES => self.game_config.themes = MatchThemes::from_str(action).unwrap(),
+                        MODE => {
+                            let mode_index =
+                                modes.iter().position(|&m| m.name() == action).unwrap();
+                            self.game_config.rules = modes[mode_index];
                         }
-                        "mode" => {
-                            game_config.rules = match action {
-                                "battle" => MatchRules::Battle,
-                                "40 line sprint" => MatchRules::LineSprint { lines: 40 },
-                                "10,000 point sprint" => MatchRules::ScoreSprint { score: 10_000 },
-                                "marathon" => MatchRules::Marathon,
-                                _ => unreachable!(),
-                            }
-                        }
-                        "level" => game_config.level = action.parse::<u32>().unwrap(),
-                        "high scores" => return Ok(Some(MainMenuAction::ViewHighScores)),
-                        "start" => break 'menu,
-                        "quit" => return Ok(None),
+                        LEVEL => self.game_config.level = action.parse::<u32>().unwrap(),
+                        HIGH_SCORES => return Ok(MainMenuAction::ViewHighScores),
+                        START => return Ok(MainMenuAction::Start),
+                        QUIT => return Ok(MainMenuAction::Quit),
                         _ => {}
                     },
                 }
+
+                self.menu_sound.play_chime()?;
             }
 
             self.canvas.set_draw_color(Color::BLACK);
@@ -323,9 +293,6 @@ impl TetrisSdl {
 
             self.canvas.present();
         }
-        Ok(Some(MainMenuAction::NewMatch {
-            config: game_config,
-        }))
     }
 
     pub fn view_high_score(&mut self, particles: &mut ParticleRender) -> Result<(), String> {
@@ -443,18 +410,17 @@ impl TetrisSdl {
 
     pub fn game(
         &mut self,
-        game_config: GameConfig,
         all_themes: &AllThemes,
         bg_particles: &mut ParticleRender,
         fg_particles: &mut ParticleRender,
     ) -> Result<Option<NewHighScore>, String> {
         let texture_creator = self.canvas.texture_creator();
         let mut inputs = GameInputContext::new(self.config.input);
-        let mut fixture = Match::new(game_config, self.config);
+        let mut fixture = Match::new(self.game_config, self.config);
         let window_size = self.canvas.window().size();
-        let mut themes = ThemeContext::new(all_themes, &texture_creator, game_config, window_size)?;
+        let mut themes = ThemeContext::new(all_themes, &texture_creator, self.game_config, window_size)?;
 
-        let mut player_textures = (0..game_config.players)
+        let mut player_textures = (0..self.game_config.players)
             .map(|_| {
                 PlayerTextures::new(
                     &texture_creator,
@@ -632,7 +598,7 @@ impl TetrisSdl {
                                 ..
                             } => {
                                 // if playing with all themes then the theme is auto switched after each level
-                                if game_config.themes == MatchThemes::All && level_up {
+                                if self.game_config.themes == MatchThemes::All && level_up {
                                     let level = player.game.level();
                                     if level > max_level {
                                         next_theme = true;
@@ -782,7 +748,6 @@ impl TetrisSdl {
 }
 
 fn main() -> Result<(), String> {
-    let mut last_game_config: Option<GameConfig> = None;
     let mut tetris = TetrisSdl::new()?;
     let texture_creator = tetris.canvas.texture_creator();
     let (_, window_height) = tetris.canvas.window().size();
@@ -810,19 +775,16 @@ fn main() -> Result<(), String> {
     )?;
 
     loop {
-        match tetris.main_menu(last_game_config, &mut bg_particles)? {
-            Some(MainMenuAction::NewMatch { config }) => {
-                last_game_config = Some(config);
+        match tetris.main_menu(&mut bg_particles)? {
+            MainMenuAction::Start => {
                 let maybe_high_score =
-                    tetris.game(config, &all_themes, &mut bg_particles, &mut fg_particles)?;
+                    tetris.game(&all_themes, &mut bg_particles, &mut fg_particles)?;
                 if let Some(high_score) = maybe_high_score {
                     tetris.new_high_score(high_score, &mut bg_particles)?;
                 }
             }
-            Some(MainMenuAction::ViewHighScores) => tetris.view_high_score(&mut bg_particles)?,
-            _ => {
-                break;
-            }
+            MainMenuAction::ViewHighScores => tetris.view_high_score(&mut bg_particles)?,
+            MainMenuAction::Quit => break
         }
     }
     Ok(())

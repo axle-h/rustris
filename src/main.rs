@@ -129,9 +129,6 @@ impl TetrisSdl {
             .build()
             .map_err(|e| e.to_string())?;
 
-        dbg!(window.drawable_size());
-        dbg!(window.size());
-
         window.set_icon(app_icon()?);
 
         let canvas_builder = window

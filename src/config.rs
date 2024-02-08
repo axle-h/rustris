@@ -7,9 +7,11 @@ use sdl2::keyboard::Keycode;
 use sdl2::mixer::MAX_VOLUME;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use confy::ConfyError;
 use strum::IntoEnumIterator;
 
 pub const APP_CONFIG_ROOT: &str = APP_NAME;
+const CONFIG_NAME: &str = "config";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VideoMode {
@@ -209,7 +211,20 @@ impl Default for Config {
 
 impl Config {
     pub fn load() -> Result<Self, String> {
-        confy::load(APP_CONFIG_ROOT, "config").map_err(|e| e.to_string())
+        let config_path = confy::get_configuration_file_path(APP_CONFIG_ROOT, CONFIG_NAME)
+            .map_err(|e| e.to_string())?;
+
+        #[cfg(debug_assertions)]
+        println!("loading config: {}", config_path.to_str().unwrap());
+
+        match confy::load(APP_CONFIG_ROOT, CONFIG_NAME) {
+            Ok(config) => Ok(config),
+            Err(ConfyError::BadYamlData(error)) => {
+                println!("Bad config file at {}, {}, loading defaults", config_path.to_str().unwrap(), error);
+                Ok(Self::default())
+            }
+            Err(error) => Err(format!("{}", error)),
+        }
     }
 }
 

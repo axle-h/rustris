@@ -152,7 +152,7 @@ impl GameMetricsTable {
     }
 
     fn width(&self) -> u32 {
-        self.rows.iter().map(|r| r.width()).sum()
+        self.rows.iter().map(|r| r.width()).max().unwrap()
     }
 }
 

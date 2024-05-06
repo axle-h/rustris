@@ -14,7 +14,7 @@ dependencies = ["sdl2", "sdl2-image", "sdl2-gfx", "sdl2-mixer", "sdl2-ttf"]
 x86_64-pc-windows-msvc = { triplet = "x64-windows-static-md" }
 
 [build-dependencies]
-build-info-build = "0.0.36"
+build-info-build = { version="0.0.36", default-features = false, features = [] }
 embed-resource = "2.4.2"
 
 [dependencies]

@@ -168,8 +168,8 @@ impl Default for Config {
         Self {
             video: VideoConfig {
                 mode: VideoMode::Window {
-                    width: 1280,
-                    height: 720,
+                    width: 640,
+                    height: 480,
                 },
                 vsync: true,
                 disable_screensaver: true,

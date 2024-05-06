@@ -178,26 +178,38 @@ impl Default for Config {
                 music_volume: 1.0,
                 effects_volume: 1.0,
             },
+            /**
+            A= Keycode::X
+            B= Keycode::Z
+            X= Keycode::C
+            Y= Keycode::A
+            L1= Keycode::RShift
+            L2= Keycode::Home
+            R1= Keycode::LShift
+            R2= Keycode::End
+            Select= Esc
+            Start= Enter
+            **/
             input: InputConfig {
                 menu: MenuInputConfig {
                     up: Keycode::Up,
                     down: Keycode::Down,
                     left: Keycode::Left,
                     right: Keycode::Right,
-                    select: Keycode::Z,
+                    select: Keycode::X,
                     start: Keycode::Return,
                 },
                 player1: GameInputConfig {
                     move_left: Keycode::Left,
                     move_right: Keycode::Right,
                     soft_drop: Keycode::Down,
-                    hard_drop: Keycode::Up,
+                    hard_drop: Keycode::Z,
                     rotate_clockwise: Keycode::X,
-                    rotate_anticlockwise: Keycode::Z,
-                    hold: Keycode::LShift,
+                    rotate_anticlockwise: Keycode::A,
+                    hold: Keycode::C,
                 },
                 player2: None,
-                pause: Keycode::F1,
+                pause: Keycode::Return,
                 quit: Keycode::Escape,
                 next_theme: Keycode::F2,
             },

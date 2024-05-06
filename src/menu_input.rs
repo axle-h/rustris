@@ -36,12 +36,8 @@ impl MenuInputContext {
                     keycode: Some(keycode),
                     ..
                 } => {
-                    println!("Keycode::{keycode:?}");
+                    //println!("Keycode::{keycode:?}");
                     self.mapping.get(&keycode).copied()
-                },
-                Event::JoyButtonDown { .. } | Event::ControllerButtonDown { .. } => {
-                    println!("{event:?}");
-                    None
                 },
                 Event::Quit { .. } => Some(MenuInputKey::Quit),
                 _ => None,

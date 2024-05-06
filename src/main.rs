@@ -64,7 +64,7 @@ use crate::menu::sound::MenuSound;
 use theme_context::{PlayerTextures, TextureMode, ThemeContext};
 use crate::icon::app_icon;
 
-const MAX_PLAYERS: u32 = 2;
+const MAX_PLAYERS: u32 = 1;
 const MAX_PARTICLES_PER_PLAYER: usize = 100000;
 const MAX_BACKGROUND_PARTICLES: usize = 100000;
 

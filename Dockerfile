@@ -1,12 +1,6 @@
-FROM rust:1.77.2-bookworm
+FROM rust:1.77.2-bullseye
 
-WORKDIR /vcpkg
-RUN git clone --depth 1 --branch 2024.03.25 https://github.com/microsoft/vcpkg.git .
-RUN ./bootstrap-vcpkg.sh
-RUN ./vcpkg install --vcpkg-root=/vcpkg --triplet=arm64-linux-release sdl2 sdl2-image sdl2-gfx sdl2-mixer sdl2-ttf
-
-ENV VCPKG_ROOT=/vcpkg \
-    VCPKGRS_TRIPLET=arm64-linux-release
+RUN apt-get update && apt-get install -y libsdl2-dev libsdl2-image-dev libsdl2-gfx-dev libsdl2-mixer-dev libsdl2-ttf-dev libmp3lame-dev libdrm-dev libgbm-dev
 
 WORKDIR /app
 

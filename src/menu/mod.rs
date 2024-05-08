@@ -1,6 +1,6 @@
 pub mod sound;
 
-use crate::build_info::BUILD_INFO;
+use crate::build_info;
 use crate::font::{FontTexture, FontType};
 use crate::menu_input::MenuInputKey;
 
@@ -200,7 +200,7 @@ impl<'a> Menu<'a> {
 
         let (window_width, window_height) = canvas.window().size();
         let font_size = window_width / 32;
-        let font = FontType::Handjet.load(ttf, font_size)?;
+        let font = FontType::Retro.load(ttf, font_size)?;
 
         let vertical_gutter = font_size / 3;
         let horizontal_gutter = font_size * 2;
@@ -237,10 +237,11 @@ impl<'a> Menu<'a> {
             .map_err(|e| e.to_string())?;
         body_texture.set_blend_mode(BlendMode::Blend);
 
-        let watermark_font_size = font_size / 2;
-        let watermark_font = FontType::Handjet.load(ttf, watermark_font_size)?;
+        let watermark_font_size = 3 * font_size / 5;
+        let watermark_font = FontType::Retro.load(ttf, watermark_font_size)?;
+        let watermark = format!("{} v{} by {}", build_info::PKG_NAME, build_info::PKG_VERSION, build_info::PKG_AUTHORS);
         let watermark_texture =
-            FontTexture::from_string(&watermark_font, texture_creator, BUILD_INFO, Color::WHITE)?;
+            FontTexture::from_string(&watermark_font, texture_creator, &watermark, Color::WHITE)?;
         let watermark_rect = Rect::new(
             (window_width - watermark_texture.width - watermark_font_size) as i32,
             (window_height - watermark_texture.height - watermark_font_size) as i32,
@@ -249,7 +250,7 @@ impl<'a> Menu<'a> {
         );
 
         let title_font_size = window_width / 24;
-        let title_font = FontType::Handjet.load(ttf, title_font_size)?;
+        let title_font = FontType::Retro.load(ttf, title_font_size)?;
         let title_texture =
             FontTexture::from_string(&title_font, texture_creator, &title_text, Color::WHITE)?;
         let title_rect = Rect::from_center(

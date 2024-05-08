@@ -3,3 +3,4 @@ target/
 build/
 Dockerfile*
 README.md
+build-aarch64-cross.sh

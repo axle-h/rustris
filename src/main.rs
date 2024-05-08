@@ -1,7 +1,9 @@
 #![windows_subsystem = "windows"]
 
 mod animation;
-mod build_info;
+mod build_info {
+    include!(concat!(env!("OUT_DIR"), "/built.rs"));
+}
 mod config;
 mod event;
 mod font;
@@ -28,11 +30,10 @@ use crate::event::{GameEvent, HighScoreEntryEvent};
 use crate::game_input::GameInputKey;
 use crate::high_score::render::HighScoreRender;
 use crate::high_score::table::HighScoreTable;
-use crate::menu::{Menu, MenuAction, MenuItem};
+use crate::menu::{Menu, MenuItem};
 use crate::menu_input::{MenuInputContext, MenuInputKey};
 use crate::player::MatchState;
 
-use crate::build_info::APP_NAME;
 use crate::frame_rate::FrameRate;
 use crate::high_score::NewHighScore;
 
@@ -64,7 +65,12 @@ use crate::menu::sound::MenuSound;
 use theme_context::{PlayerTextures, TextureMode, ThemeContext};
 use crate::icon::app_icon;
 
+#[cfg(not(feature = "retro_handheld"))]
 const MAX_PLAYERS: u32 = 2;
+
+#[cfg(feature = "retro_handheld")]
+const MAX_PLAYERS: u32 = 1;
+
 const MAX_PARTICLES_PER_PLAYER: usize = 100000;
 const MAX_BACKGROUND_PARTICLES: usize = 100000;
 
@@ -119,7 +125,7 @@ impl TetrisSdl {
             _ => (1, 1),
         };
 
-        let mut window_builder = video.window(APP_NAME, width, height);
+        let mut window_builder = video.window(build_info::PKG_NAME, width, height);
         match config.video.mode {
             VideoMode::FullScreen { .. } => {
                 window_builder.fullscreen();
@@ -212,36 +218,48 @@ impl TetrisSdl {
         let texture_creator = self.canvas.texture_creator();
         let inputs = MenuInputContext::new(self.config.input);
         let modes = MatchRules::DEFAULT_MODES;
-        let mut menu = Menu::new(
-            vec![
+
+        let mut menu_items = vec![
+            MenuItem::select_list(
+                THEMES,
+                MatchThemes::names().into_iter().map(|s| s.to_string()).collect(),
+                self.game_config.themes as usize,
+            ),
+            MenuItem::select_list(
+                MODE,
+                modes.iter().map(|m| m.name()).collect(),
+                modes.iter().position(|&m| m == self.game_config.rules).unwrap()
+            ),
+            MenuItem::select_list(
+                LEVEL,
+                (0..10).map(|i| i.to_string()).collect(),
+                self.game_config.level as usize,
+            ),
+            MenuItem::select(HIGH_SCORES),
+            MenuItem::select(START),
+            MenuItem::select(QUIT),
+        ];
+
+        if MAX_PLAYERS > 1 {
+            menu_items.insert(
+                0,
                 MenuItem::select_list(
                     PLAYERS,
-                    vec!["1".to_string(), "2".to_string()],
+                    (1..=MAX_PLAYERS)
+                        .into_iter()
+                        .map(|i| i.to_string())
+                        .collect::<Vec<String>>(),
                     self.game_config.players as usize - 1,
-                ),
-                MenuItem::select_list(
-                    THEMES,
-                    MatchThemes::names().into_iter().map(|s| s.to_string()).collect(),
-                    self.game_config.themes as usize,
-                ),
-                MenuItem::select_list(
-                    MODE,
-                    modes.iter().map(|m| m.name()).collect(),
-                    modes.iter().position(|&m| m == self.game_config.rules).unwrap()
-                ),
-                MenuItem::select_list(
-                    LEVEL,
-                    (0..10).map(|i| i.to_string()).collect(),
-                    self.game_config.level as usize,
-                ),
-                MenuItem::select(HIGH_SCORES),
-                MenuItem::select(START),
-                MenuItem::select(QUIT),
-            ],
+                )
+            )
+        }
+
+        let mut menu = Menu::new(
+            menu_items,
             &mut self.canvas,
             &self.ttf,
             &texture_creator,
-            APP_NAME.to_uppercase(),
+            build_info::PKG_NAME.to_uppercase(),
             None
         )?;
 

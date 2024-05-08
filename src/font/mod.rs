@@ -7,14 +7,13 @@ use sdl2::video::WindowContext;
 const FONT_ROBOTO_REGULAR: &[u8] = include_bytes!("Roboto-Regular.ttf");
 const FONT_ROBOTO_BOLD: &[u8] = include_bytes!("Roboto-Bold.ttf");
 const FONT_ROBOTO_MONO_REGULAR: &[u8] = include_bytes!("RobotoMono-Regular.ttf");
-const FONT_HANDJET: &[u8] = include_bytes!("Handjet.ttf");
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum FontType {
     Normal,
     Bold,
     Mono,
-    Handjet,
+    Retro,
 }
 
 impl FontType {
@@ -31,7 +30,10 @@ impl FontType {
             FontType::Normal => FONT_ROBOTO_REGULAR,
             FontType::Bold => FONT_ROBOTO_BOLD,
             FontType::Mono => FONT_ROBOTO_MONO_REGULAR,
-            FontType::Handjet => FONT_HANDJET,
+            #[cfg(not(feature = "retro_handheld"))]
+            FontType::Retro => include_bytes!("Handjet.ttf"),
+            #[cfg(feature = "retro_handheld")]
+            FontType::Retro => FONT_ROBOTO_REGULAR,
         }
     }
 }

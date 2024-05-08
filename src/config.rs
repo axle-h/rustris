@@ -1,5 +1,4 @@
 use num_format::{Locale, ToFormattedString};
-use crate::build_info::APP_NAME;
 use crate::game::random::RandomMode;
 use crate::game_input::GameInputKey;
 use crate::menu_input::MenuInputKey;
@@ -7,11 +6,9 @@ use sdl2::keyboard::Keycode;
 use sdl2::mixer::MAX_VOLUME;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use confy::ConfyError;
 use strum::IntoEnumIterator;
-
-pub const APP_CONFIG_ROOT: &str = APP_NAME;
-const CONFIG_NAME: &str = "config";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VideoMode {
@@ -167,9 +164,15 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             video: VideoConfig {
+                #[cfg(not(feature = "retro_handheld"))]
                 mode: VideoMode::Window {
                     width: 1280,
                     height: 720,
+                },
+                #[cfg(feature = "retro_handheld")]
+                mode: VideoMode::FullScreen {
+                    width: 640,
+                    height: 480,
                 },
                 vsync: true,
                 disable_screensaver: true,
@@ -178,13 +181,26 @@ impl Default for Config {
                 music_volume: 1.0,
                 effects_volume: 1.0,
             },
+            /*
+              ArkOS Default Controls:
+              A= Keycode::X
+              B= Keycode::Z
+              X= Keycode::C
+              Y= Keycode::A
+              L1= Keycode::RShift
+              L2= Keycode::Home
+              R1= Keycode::LShift
+              R2= Keycode::End
+              Select= Keycode::Esc
+              Start= Keycode::Return
+            */
             input: InputConfig {
                 menu: MenuInputConfig {
                     up: Keycode::Up,
                     down: Keycode::Down,
                     left: Keycode::Left,
                     right: Keycode::Right,
-                    select: Keycode::Z,
+                    select: Keycode::X,
                     start: Keycode::Return,
                 },
                 player1: GameInputConfig {
@@ -197,9 +213,11 @@ impl Default for Config {
                     hold: Keycode::LShift,
                 },
                 player2: None,
-                pause: Keycode::F1,
+                #[cfg(feature = "retro_handheld")] pause: Keycode::Return,
+                #[cfg(not(feature = "retro_handheld"))] pause: Keycode::F1,
+                #[cfg(feature = "retro_handheld")] next_theme: Keycode::RShift,
+                #[cfg(not(feature = "retro_handheld"))] next_theme: Keycode::F2,
                 quit: Keycode::Escape,
-                next_theme: Keycode::F2,
             },
             game: GameplayConfig {
                 random_mode: RandomMode::Bag,
@@ -209,15 +227,28 @@ impl Default for Config {
     }
 }
 
+#[cfg(feature = "retro_handheld")]
+pub fn config_path(name: &str) -> Result<PathBuf, String> {
+    let mut absolute = std::env::current_dir().map_err(|e| e.to_string())?;
+    absolute.push(format!("{}.yml", name));
+    Ok(absolute)
+}
+
+#[cfg(not(feature = "retro_handheld"))]
+pub fn config_path(name: &str) -> Result<PathBuf, String> {
+    confy::get_configuration_file_path(crate::build_info::PKG_NAME, name)
+        .map_err(|e| e.to_string())
+}
+
 impl Config {
+
     pub fn load() -> Result<Self, String> {
-        let config_path = confy::get_configuration_file_path(APP_CONFIG_ROOT, CONFIG_NAME)
-            .map_err(|e| e.to_string())?;
+        let config_path = config_path("config")?;
 
         #[cfg(debug_assertions)]
         println!("loading config: {}", config_path.to_str().unwrap());
 
-        match confy::load(APP_CONFIG_ROOT, CONFIG_NAME) {
+        match confy::load_path(&config_path) {
             Ok(config) => Ok(config),
             Err(ConfyError::BadYamlData(error)) => {
                 println!("Bad config file at {}, {}, loading defaults", config_path.to_str().unwrap(), error);

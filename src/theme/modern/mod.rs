@@ -34,7 +34,12 @@ const SEND_GARBAGE_ALT_SOUND: &[u8] = include_bytes!("send-garbage-alt.ogg");
 const STACK_DROP_SOUND: &[u8] = include_bytes!("stack-drop.ogg");
 const VICTORY_SOUND: &[u8] = include_bytes!("victory.ogg");
 
-const MIN_VERTICAL_BUFFER_PCT: f64 = 0.1;
+#[cfg(not(feature = "retro_handheld"))]
+const MIN_VERTICAL_BUFFER_PCT: f64 = 0.05;
+
+#[cfg(feature = "retro_handheld")]
+const MIN_VERTICAL_BUFFER_PCT: f64 = 0.02;
+
 const BOARD_BORDER_PCT_OF_BLOCK: f64 = 0.5;
 const BOARD_BOARDER_SHADOW: u8 = 0x99;
 const TETROMINO_PCT_OF_BLOCK: f64 = 1.5;

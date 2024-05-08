@@ -1,0 +1,37 @@
+FROM debian:10
+
+# Install dependencies
+RUN dpkg --add-architecture arm64 && apt update && apt upgrade -y \
+  && apt install -y build-essential crossbuild-essential-arm64 zip unzip cmake meson git wget curl unzip pkg-config autoconf \
+                    libsdl2-dev:arm64 libsdl2-image-dev:arm64 libsdl2-gfx-dev:arm64 libsdl2-mixer-dev:arm64 \
+                    libsdl2-ttf-dev:arm64 libmp3lame-dev:arm64 libdrm-dev:arm64 libgbm-dev:arm64 \
+                    libasound2-dev:arm64 libsndio-dev:arm64 libudev-dev:arm64 libdbus-1-dev:arm64 \
+                    libsamplerate0-dev:arm64 libibus-1.0-dev:arm64 libfreetype6-dev:arm64 libgl1-mesa-dev:arm64 \
+  && ln -sf /usr/share/pkg-config-crosswrapper /usr/bin/aarch64-linux-gnu-pkg-config
+
+# Install rust
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
+ENV PATH="${PATH}:/root/.cargo/bin"
+RUN rustup target add aarch64-unknown-linux-gnu \
+    && rustup toolchain install stable-aarch64-unknown-linux-gnu
+
+# Install the patched SDL2 from arkos
+WORKDIR /arkos
+RUN wget https://github.com/christianhaitian/arkos/raw/main/02092023/arkosupdate02092023.zip \
+    && unzip -o arkosupdate02092023.zip \
+    && rm arkosupdate02092023.zip \
+    && cp -f -v home/ark/sdl2-64/libSDL2-2.0.so.0.2600.2.rk3566 /usr/lib/aarch64-linux-gnu/libSDL2-2.0.so.0.2600.2 \
+    && ln -sfv /usr/lib/aarch64-linux-gnu/libSDL2.so /usr/lib/aarch64-linux-gnu/libSDL2-2.0.so.0 \
+    && ln -sfv /usr/lib/aarch64-linux-gnu/libSDL2-2.0.so.0.2600.2 /usr/lib/aarch64-linux-gnu/libSDL2.so
+
+ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
+    CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc \
+    CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++ \
+    PKG_CONFIG=/usr/bin/aarch64-linux-gnu-pkg-config
+
+WORKDIR /app
+
+ADD . .
+RUN cargo build --release --target aarch64-unknown-linux-gnu --no-default-features --features pkgconfig,retro_handheld
+
+CMD tail -f /dev/null

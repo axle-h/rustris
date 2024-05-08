@@ -13,18 +13,23 @@ dependencies = ["sdl2", "sdl2-image", "sdl2-gfx", "sdl2-mixer", "sdl2-ttf"]
 [package.metadata.vcpkg.target]
 x86_64-pc-windows-msvc = { triplet = "x64-windows-static-md" }
 
+[features]
+default = ["vcpkg"]
+vcpkg = ["sdl2/static-link", "sdl2/use-vcpkg"]
+pkgconfig = ["sdl2/use-pkgconfig"]
+retro_handheld = []
+
 [build-dependencies]
-build-info-build = "0.0.36"
+built = { version = "0.7.2", default-features = false, features = [] }
 embed-resource = "2.4.2"
 
 [dependencies]
 rand = "0.8.5"
 rand_chacha = "0.3.1"
-serde = { version = "1.0.199", default-features = false, features = ["derive"] }
-serde_derive = "1.0.199"
-build-info = { version = "0.0.36", default-features = false, features = [] }
+serde = { version = "1.0.201", default-features = false, features = ["derive"] }
+serde_derive = "1.0.201"
 bitflags = "2.5.0"
-sdl2 = { version = "0.36.0", default-features = false, features = ["static-link","use-vcpkg","image","gfx","mixer","ttf"] }
+sdl2 = { version = "0.36.0", default-features = false, features = ["image","gfx","mixer","ttf"] }
 confy = { version = "0.6.1", default-features = false, features = ["yaml_conf"] }
 num-format = "0.4.4"
 strum = { version = "0.26.2", features = ["derive"] }

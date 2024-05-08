@@ -178,7 +178,7 @@ impl<'a, 'ttf> HighScoreRender<'a, 'ttf> {
         let font_size = window_width / 32;
         let font_header = FontType::Bold.load(ttf, font_size)?;
         let font_body = FontType::Mono.load(ttf, font_size)?;
-        let font_title = FontType::Handjet.load(ttf, window_width / 24)?;
+        let font_title = FontType::Retro.load(ttf, window_width / 24)?;
 
         let (table, entry) = if let Some(new_high_score) = new_high_score {
             let score_index = table

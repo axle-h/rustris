@@ -1,4 +1,4 @@
-use crate::config::{GameConfig, MatchThemes};
+use crate::config::{Config, GameConfig, MatchThemes, VideoConfig};
 use crate::game::tetromino::Minos;
 use crate::scale::Scale;
 use crate::theme::all::AllThemes;
@@ -74,12 +74,14 @@ pub struct ScaledTheme<'a> {
 }
 
 impl<'a> ScaledTheme<'a> {
-    fn new(theme: &'a Theme, players: u32, window_size: (u32, u32)) -> Self {
+    fn new(theme: &'a Theme, players: u32, window_size: (u32, u32), video_config: VideoConfig) -> Self {
         let scale = Scale::new(
             players,
             theme.background_size(),
             window_size,
             theme.geometry().block_size(),
+            video_config,
+            theme.name()
         );
         let (theme_width, theme_height) = theme.background_size();
         let bg_source_snip = Rect::new(0, 0, theme_width, theme_height);
@@ -124,6 +126,7 @@ impl<'a> ThemeContext<'a> {
         all_themes: &'a AllThemes,
         texture_creator: &'a TextureCreator<WindowContext>,
         game_config: GameConfig,
+        config: Config,
         window_size: (u32, u32),
     ) -> Result<Self, String> {
         let (window_width, window_height) = window_size;
@@ -145,7 +148,7 @@ impl<'a> ThemeContext<'a> {
             themes: all_themes
                 .all()
                 .iter()
-                .map(|theme| ScaledTheme::new(theme, game_config.players, window_size))
+                .map(|theme| ScaledTheme::new(theme, game_config.players, window_size, config.video))
                 .collect(),
             fade_buffer,
             fade_duration: None,

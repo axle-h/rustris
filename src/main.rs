@@ -440,7 +440,7 @@ impl TetrisSdl {
         let mut inputs = GameInputContext::new(self.config.input);
         let mut fixture = Match::new(self.game_config, self.config);
         let window_size = self.canvas.window().size();
-        let mut themes = ThemeContext::new(all_themes, &texture_creator, self.game_config, window_size)?;
+        let mut themes = ThemeContext::new(all_themes, &texture_creator, self.game_config, self.config, window_size)?;
 
         let mut player_textures = (0..self.game_config.players)
             .map(|_| {

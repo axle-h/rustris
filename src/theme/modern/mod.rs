@@ -34,12 +34,6 @@ const SEND_GARBAGE_ALT_SOUND: &[u8] = include_bytes!("send-garbage-alt.ogg");
 const STACK_DROP_SOUND: &[u8] = include_bytes!("stack-drop.ogg");
 const VICTORY_SOUND: &[u8] = include_bytes!("victory.ogg");
 
-#[cfg(not(feature = "retro_handheld"))]
-const MIN_VERTICAL_BUFFER_PCT: f64 = 0.05;
-
-#[cfg(feature = "retro_handheld")]
-const MIN_VERTICAL_BUFFER_PCT: f64 = 0.02;
-
 const BOARD_BORDER_PCT_OF_BLOCK: f64 = 0.5;
 const BOARD_BOARDER_SHADOW: u8 = 0x99;
 const TETROMINO_PCT_OF_BLOCK: f64 = 1.5;
@@ -166,10 +160,10 @@ pub fn modern_theme<'a>(
     texture_creator: &'a TextureCreator<WindowContext>,
     ttf: &Sdl2TtfContext,
     config: Config,
-    window_height: u32,
+    window_height: u32
 ) -> Result<Theme<'a>, String> {
     let block_size = (window_height as f64
-        - (2.0 * window_height as f64 * MIN_VERTICAL_BUFFER_PCT))
+        - (2.0 * window_height as f64 * config.video.screen_padding_pct()))
         / VISIBLE_BOARD_HEIGHT as f64;
     let border_weight = (block_size * BOARD_BORDER_PCT_OF_BLOCK).round() as u32;
     let vertical_gutter = (VERTICAL_GUTTER_PCT_OF_BLOCK * block_size).round() as u32;

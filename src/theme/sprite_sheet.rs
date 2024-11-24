@@ -11,7 +11,7 @@ use sdl2::rect::{Point, Rect};
 use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::video::WindowContext;
 use std::collections::HashMap;
-use crate::theme::helper::TextureFactory;
+use crate::theme::helper::{CanvasRenderer, TextureFactory};
 
 struct TetrominoTexture<'a> {
     perimeter: Texture<'a>,
@@ -223,8 +223,7 @@ fn draw_sprites<'a>(
     let mut texture = texture_creator.create_texture_target_blended(width, height)?;
     canvas
         .with_texture_canvas(&mut texture, |c| {
-            c.set_draw_color(Color::RGBA(0, 0, 0, 0));
-            c.clear();
+            c.clear_0();
             for (src, dest) in src_snips.iter().copied().zip(mino_rects) {
                 c.copy(sprites, src, dest).unwrap();
             }
@@ -245,8 +244,7 @@ fn draw_perimeter<'a>(
     let mut texture = texture_creator.create_texture_target_blended(width, height)?;
     canvas
         .with_texture_canvas(&mut texture, |c| {
-            c.set_draw_color(Color::RGBA(0, 0, 0, 0));
-            c.clear();
+            c.clear_0();
             c.set_draw_color(Color::WHITE);
             for ((rect, perimeter), outside_corner) in mino_rects
                 .iter()
@@ -333,6 +331,7 @@ impl<'a> TetrominoSpriteSheet<'a> {
             ghost.set_alpha_mod(meta.ghost_alpha);
             canvas
                 .with_texture_canvas(&mut ghost, |c| {
+                    c.clear_0();
                     c.copy(&normal, None, None).unwrap();
                 })
                 .map_err(|e| e.to_string())?;
@@ -378,6 +377,7 @@ impl<'a> TetrominoSpriteSheet<'a> {
         let mut garbage = texture_creator.create_texture_target_blended(block_size, block_size)?;
         canvas
             .with_texture_canvas(&mut garbage, |c| {
+                c.clear_0();
                 c.copy(&sprite_src, meta.garbage_snip(), None).unwrap();
             })
             .map_err(|e| e.to_string())?;
@@ -496,6 +496,8 @@ impl<'a> TetrominoSpriteSheet<'a> {
         let mut snips = HashMap::new();
         canvas
             .with_texture_canvas(&mut texture, |c| {
+                c.clear_0();
+                
                 let mut x = 0;
                 for (shape, tetromino) in self.tetrominos.iter() {
                     let rect = Rect::new(x, 0, tetromino.width, tetromino.height);

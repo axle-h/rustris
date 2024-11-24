@@ -9,7 +9,7 @@ use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::ttf::{Font, Sdl2TtfContext};
 use sdl2::video::WindowContext;
 use std::cmp::min;
-use crate::theme::helper::TextureFactory;
+use crate::theme::helper::{CanvasRenderer, TextureFactory};
 
 const NAME_CHARACTERS: usize = 5;
 const CARET_HEIGHT: u32 = 2;
@@ -311,8 +311,7 @@ impl<'a, 'ttf> HighScoreRender<'a, 'ttf> {
     pub fn draw(&mut self, canvas: &mut WindowCanvas) -> Result<(), String> {
         canvas
             .with_texture_canvas(&mut self.texture, |c| {
-                c.set_draw_color(Color::RGBA(0, 0, 0, 0));
-                c.clear();
+                c.clear_0();
 
                 let mut y = 0;
                 for (i, row) in self.rows.iter().enumerate() {

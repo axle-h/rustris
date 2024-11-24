@@ -13,7 +13,7 @@ use sdl2::rect::{Point, Rect};
 use sdl2::render::{BlendMode, TextureCreator, WindowCanvas};
 use sdl2::ttf::Sdl2TtfContext;
 use sdl2::video::WindowContext;
-use crate::theme::helper::TextureFactory;
+use crate::theme::helper::{CanvasRenderer, TextureFactory};
 
 const SPRITES: &[u8] = include_bytes!("sprites.png");
 
@@ -296,8 +296,7 @@ pub fn modern_theme<'a>(
     let mut board_texture = texture_creator.create_texture_target_blended(board_snip.width(), board_snip.height())?;
     canvas
         .with_texture_canvas(&mut board_texture, |c| {
-            c.set_draw_color(Color::RGBA(0, 0, 0, 0));
-            c.clear();
+            c.clear_0();
             for (r, color) in borders.iter().copied() {
                 c.set_draw_color(Color::RGBA(color, color, color, color));
                 c.draw_rect(r).unwrap();
@@ -318,6 +317,7 @@ pub fn modern_theme<'a>(
     let mut bg_texture = texture_creator.create_texture_target_blended(background_width, background_height)?;
     canvas
         .with_texture_canvas(&mut bg_texture, |c| {
+            c.clear_0();
             for row in all_metrics.iter() {
                 font_bold
                     .render_string(c, row.label, row.metric.label())
@@ -341,6 +341,8 @@ pub fn modern_theme<'a>(
     let mut game_over = texture_creator.create_texture_target_blended(game_over_width, game_over_height)?;
     canvas
         .with_texture_canvas(&mut game_over, |c| {
+            c.clear_0();
+            
             let top_center = Rect::new(0, 0, game_over_width, game_text_height).center();
             let game_text_rect = Rect::from_center(top_center, game_text_width, game_text_height);
             game_over_font

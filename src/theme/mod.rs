@@ -18,7 +18,7 @@ use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::video::WindowContext;
-use crate::theme::helper::TextureFactory;
+use crate::theme::helper::{CanvasRenderer, TextureFactory};
 
 pub mod all;
 pub mod font;
@@ -65,6 +65,7 @@ pub fn create_mask_texture<'a>(
     let mut mask_texture = texture_creator.create_texture_target_blended(query.width, query.height)?;
     canvas
         .with_texture_canvas(&mut mask_texture, |c| {
+            c.clear_0();
             c.copy(texture, None, None).unwrap();
         })
         .map_err(|e| e.to_string())?;

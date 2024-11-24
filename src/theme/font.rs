@@ -7,7 +7,7 @@ use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::ttf::Sdl2TtfContext;
 use sdl2::video::WindowContext;
 use std::collections::HashMap;
-use crate::theme::helper::TextureFactory;
+use crate::theme::helper::{CanvasRenderer, TextureFactory};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum FontAlign {
@@ -193,8 +193,7 @@ impl<'a> FontRender<'a> {
         let mut x = 0;
         canvas
             .with_texture_canvas(&mut texture, |c| {
-                c.set_draw_color(Color::RGBA(0, 0, 0, 0));
-                c.clear();
+                c.clear_0();
                 for (ch, font_texture) in chars {
                     let snip = Rect::new(x, 0, font_texture.width, font_texture.height);
                     x += font_texture.width as i32;

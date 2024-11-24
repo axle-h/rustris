@@ -5,12 +5,11 @@ use crate::theme::geometry::BoardGeometry;
 use crate::theme::sound::SoundThemeOptions;
 use crate::theme::sprite_sheet::{MinoType, TetrominoSpriteSheet, TetrominoSpriteSheetMeta};
 use crate::theme::{create_mask_texture, TetrominoScaleType, Theme, ThemeName, VISIBLE_PEEK};
-use sdl2::image::LoadTexture;
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
 use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::video::WindowContext;
-use crate::theme::helper::TextureFactory;
+use crate::theme::helper::{CanvasRenderer, TextureFactory};
 
 pub struct RetroThemeOptions {
     name: ThemeName,
@@ -90,6 +89,7 @@ pub fn plus_buffer<'a>(
     let mut texture = texture_creator.create_texture_target_blended(query.width, query.height + buffer_height)?;
     canvas
         .with_texture_canvas(&mut texture, |c| {
+            c.clear_0();
             c.copy(
                 &raw,
                 None,

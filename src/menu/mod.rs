@@ -10,7 +10,7 @@ use sdl2::rect::Rect;
 use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::ttf::{Font, Sdl2TtfContext};
 use sdl2::video::WindowContext;
-use crate::theme::helper::TextureFactory;
+use crate::theme::helper::{CanvasRenderer, TextureFactory};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MenuAction {
@@ -135,8 +135,7 @@ impl<'a> MenuRow<'a> {
         let mut texture = texture_creator.create_texture_target_blended(rect.width(), rect.height())?;
         canvas
             .with_texture_canvas(&mut texture, |c| {
-                c.set_draw_color(Color::RGBA(0, 0, 0, 0));
-                c.clear();
+                c.clear_0();
                 if let Some(background_color) = background_color {
                     let rad = rect.height() as i32 / 2;
                     let top_right = rect.top_right();
@@ -280,6 +279,8 @@ impl<'a> Menu<'a> {
         let mut select_list_background = texture_creator.create_texture_target_blended(body_width, row_height)?;
         canvas
             .with_texture_canvas(&mut select_list_background, |c| {
+                c.clear_0();
+                
                 let rect = Rect::new(0, 0, body_width, row_height);
                 // TODO this lot is repeated, can be extracted into a canvas trait
                 let rad = rect.height() as i32 / 2;
@@ -389,8 +390,7 @@ impl<'a> Menu<'a> {
 
         canvas
             .with_texture_canvas(&mut self.body.texture, |tc| {
-                tc.set_draw_color(Color::RGBA(0, 0, 0, 0));
-                tc.clear();
+                tc.clear_0();
 
                 for (row_id, (row, row_rect)) in
                 self.rows.iter().zip(self.row_rects.iter()).enumerate()

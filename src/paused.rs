@@ -4,6 +4,7 @@ use sdl2::rect::Rect;
 use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::ttf::Sdl2TtfContext;
 use sdl2::video::WindowContext;
+use crate::theme::helper::TextureFactory;
 
 pub struct PausedScreen<'a> {
     texture: Texture<'a>,
@@ -25,10 +26,7 @@ impl<'a> PausedScreen<'a> {
             font_texture.height,
         );
 
-        let mut texture = texture_creator
-            .create_texture_target(None, window_width, window_height)
-            .map_err(|e| e.to_string())?;
-        texture.set_blend_mode(BlendMode::Blend);
+        let mut texture = texture_creator.create_texture_target_blended(window_width, window_height)?;
         canvas
             .with_texture_canvas(&mut texture, |c| {
                 c.set_draw_color(Color::RGBA(0xff, 0xff, 0xff, 0xdd));

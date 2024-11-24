@@ -18,6 +18,7 @@ use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::video::WindowContext;
+use crate::theme::helper::TextureFactory;
 
 pub mod all;
 pub mod font;
@@ -29,6 +30,7 @@ mod retro;
 pub mod snes;
 pub mod sound;
 pub mod sprite_sheet;
+pub mod helper;
 
 const VISIBLE_PEEK: usize = 5;
 
@@ -60,10 +62,7 @@ pub fn create_mask_texture<'a>(
     texture: &Texture,
 ) -> Result<Texture<'a>, String> {
     let query = texture.query();
-    let mut mask_texture = texture_creator
-        .create_texture_target(None, query.width, query.height)
-        .map_err(|e| e.to_string())?;
-    mask_texture.set_blend_mode(BlendMode::None);
+    let mut mask_texture = texture_creator.create_texture_target_blended(query.width, query.height)?;
     canvas
         .with_texture_canvas(&mut mask_texture, |c| {
             c.copy(texture, None, None).unwrap();

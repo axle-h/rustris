@@ -10,6 +10,7 @@ use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
 use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::video::WindowContext;
+use crate::theme::helper::TextureFactory;
 
 pub struct RetroThemeOptions {
     name: ThemeName,
@@ -84,12 +85,9 @@ pub fn plus_buffer<'a>(
     buffer_height: u32,
     file_bytes: &'static [u8],
 ) -> Result<(Texture<'a>, u32, u32), String> {
-    let raw = texture_creator.load_texture_bytes(file_bytes)?;
+    let raw = texture_creator.load_texture_bytes_blended(file_bytes)?;
     let query = raw.query();
-    let mut texture = texture_creator
-        .create_texture_target(None, query.width, query.height + buffer_height)
-        .map_err(|e| e.to_string())?;
-    texture.set_blend_mode(BlendMode::Blend);
+    let mut texture = texture_creator.create_texture_target_blended(query.width, query.height + buffer_height)?;
     canvas
         .with_texture_canvas(&mut texture, |c| {
             c.copy(
@@ -140,7 +138,7 @@ pub fn retro_theme<'a>(
 
     let font = options.font_options.build(texture_creator)?;
 
-    let game_over = texture_creator.load_texture_bytes(options.game_over_file)?;
+    let game_over = texture_creator.load_texture_bytes_blended(options.game_over_file)?;
     let sound = options.sound.clone().build()?;
 
     Ok(Theme {

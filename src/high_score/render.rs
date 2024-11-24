@@ -9,6 +9,7 @@ use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::ttf::{Font, Sdl2TtfContext};
 use sdl2::video::WindowContext;
 use std::cmp::min;
+use crate::theme::helper::TextureFactory;
 
 const NAME_CHARACTERS: usize = 5;
 const CARET_HEIGHT: u32 = 2;
@@ -228,10 +229,7 @@ impl<'a, 'ttf> HighScoreRender<'a, 'ttf> {
         // all rows will be same height as the tallest row
         let row_height = rows.iter().map(|r| r.height()).max().unwrap();
         let height = n_rows * row_height + (n_rows - 1) * padding;
-        let mut texture = texture_creator
-            .create_texture_target(None, width, height)
-            .map_err(|e| e.to_string())?;
-        texture.set_blend_mode(BlendMode::Blend);
+        let texture = texture_creator.create_texture_target_blended(width, height)?;
         let rect = Rect::from_center(
             Point::new(window_width as i32 / 2, window_height as i32 / 2),
             width,

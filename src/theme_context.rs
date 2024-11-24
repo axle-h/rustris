@@ -8,6 +8,7 @@ use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 
 use sdl2::video::WindowContext;
 use std::time::Duration;
+use crate::theme::helper::TextureFactory;
 
 const THEME_FADE_DURATION: Duration = Duration::from_millis(1000);
 
@@ -23,16 +24,10 @@ impl<'a> PlayerTextures<'a> {
         board_size: (u32, u32),
     ) -> Result<Self, String> {
         let (bg_width, bg_height) = background_size;
-        let mut background = texture_creator
-            .create_texture_target(None, bg_width, bg_height)
-            .map_err(|e| e.to_string())?;
-        background.set_blend_mode(BlendMode::Blend);
+        let background = texture_creator.create_texture_target_blended(bg_width, bg_height)?;
 
         let (board_width, board_height) = board_size;
-        let mut board = texture_creator
-            .create_texture_target(None, board_width, board_height)
-            .map_err(|e| e.to_string())?;
-        board.set_blend_mode(BlendMode::Blend);
+        let board = texture_creator.create_texture_target_blended(board_width, board_height)?;
 
         Ok(Self { background, board })
     }
@@ -131,10 +126,7 @@ impl<'a> ThemeContext<'a> {
     ) -> Result<Self, String> {
         let (window_width, window_height) = window_size;
 
-        let mut fade_buffer = texture_creator
-            .create_texture_target(None, window_width, window_height)
-            .map_err(|e| e.to_string())?;
-        fade_buffer.set_blend_mode(BlendMode::Blend);
+        let fade_buffer = texture_creator.create_texture_target_blended(window_width, window_height)?;
 
         let current = match game_config.themes {
             MatchThemes::All | MatchThemes::GameBoy => 0,

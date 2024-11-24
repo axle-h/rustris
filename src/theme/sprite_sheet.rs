@@ -11,6 +11,7 @@ use sdl2::rect::{Point, Rect};
 use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::video::WindowContext;
 use std::collections::HashMap;
+use crate::theme::helper::TextureFactory;
 
 struct TetrominoTexture<'a> {
     perimeter: Texture<'a>,
@@ -219,10 +220,7 @@ fn draw_sprites<'a>(
     width: u32,
     height: u32,
 ) -> Result<Texture<'a>, String> {
-    let mut texture = texture_creator
-        .create_texture_target(None, width, height)
-        .map_err(|e| e.to_string())?;
-    texture.set_blend_mode(BlendMode::Blend);
+    let mut texture = texture_creator.create_texture_target_blended(width, height)?;
     canvas
         .with_texture_canvas(&mut texture, |c| {
             c.set_draw_color(Color::RGBA(0, 0, 0, 0));
@@ -244,10 +242,7 @@ fn draw_perimeter<'a>(
     height: u32,
 ) -> Result<Texture<'a>, String> {
     let meta = shape.meta();
-    let mut texture = texture_creator
-        .create_texture_target(None, width, height)
-        .map_err(|e| e.to_string())?;
-    texture.set_blend_mode(BlendMode::Blend);
+    let mut texture = texture_creator.create_texture_target_blended(width, height)?;
     canvas
         .with_texture_canvas(&mut texture, |c| {
             c.set_draw_color(Color::RGBA(0, 0, 0, 0));
@@ -301,7 +296,7 @@ impl<'a> TetrominoSpriteSheet<'a> {
         meta: TetrominoSpriteSheetMeta,
         block_size: u32,
     ) -> Result<Self, String> {
-        let sprite_src = texture_creator.load_texture_bytes(meta.sprite_file)?;
+        let sprite_src = texture_creator.load_texture_bytes_blended(meta.sprite_file)?;
 
         let mut textures = HashMap::new();
         for shape in TetrominoShape::ALL.iter().copied() {
@@ -334,10 +329,7 @@ impl<'a> TetrominoSpriteSheet<'a> {
                 height,
             )?;
 
-            let mut ghost = texture_creator
-                .create_texture_target(None, width, height)
-                .map_err(|e| e.to_string())?;
-            ghost.set_blend_mode(BlendMode::Blend);
+            let mut ghost = texture_creator.create_texture_target_blended(width, height)?;
             ghost.set_alpha_mod(meta.ghost_alpha);
             canvas
                 .with_texture_canvas(&mut ghost, |c| {
@@ -383,10 +375,7 @@ impl<'a> TetrominoSpriteSheet<'a> {
             );
         }
 
-        let mut garbage = texture_creator
-            .create_texture_target(None, block_size, block_size)
-            .map_err(|e| e.to_string())?;
-        garbage.set_blend_mode(BlendMode::Blend);
+        let mut garbage = texture_creator.create_texture_target_blended(block_size, block_size)?;
         canvas
             .with_texture_canvas(&mut garbage, |c| {
                 c.copy(&sprite_src, meta.garbage_snip(), None).unwrap();
@@ -502,10 +491,7 @@ impl<'a> TetrominoSpriteSheet<'a> {
         });
         let width = sizes.map(|(w, _)| w).into_iter().sum::<u32>();
         let height = sizes.map(|(_, h)| h).into_iter().max().unwrap();
-        let mut texture = texture_creator
-            .create_texture_target(None, width, height)
-            .map_err(|e| e.to_string())?;
-        texture.set_blend_mode(BlendMode::Blend);
+        let mut texture = texture_creator.create_texture_target_blended(width, height)?;
 
         let mut snips = HashMap::new();
         canvas

@@ -1,10 +1,10 @@
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::rect::{Point, Rect};
-use sdl2::render::BlendMode;
 use sdl2::render::{Texture, TextureCreator, WindowCanvas};
 use sdl2::video::WindowContext;
 use std::cmp::min;
 use std::time::Duration;
+use crate::theme::helper::TextureFactory;
 
 const MAX_ALPHA: u8 = 100;
 const FRAME_DURATION: Duration = Duration::from_millis(3);
@@ -38,19 +38,16 @@ impl<'a> HardDropAnimation<'a> {
             .collect::<Vec<Point>>();
 
         let snip = Rect::from_enclose_points(&points, None).unwrap();
-        let mut texture = texture_creator
-            .create_texture_target(PixelFormatEnum::ARGB8888, snip.width(), snip.height())
-            .map_err(|e| e.to_string())?;
-        texture.set_blend_mode(BlendMode::Blend);
+        let mut texture = texture_creator.create_texture_target_blended(snip.width(), snip.height())?;
         for rect in minos.iter() {
-            let pixels = canvas.read_pixels(*rect, PixelFormatEnum::ARGB8888)?;
+            let pixels = canvas.read_pixels(*rect, PixelFormatEnum::RGBA8888)?;
             let translated_rect = Rect::new(
                 rect.x() - snip.x(),
                 rect.y() - snip.y(),
                 rect.width(),
                 rect.height(),
             );
-            let pitch = PixelFormatEnum::ARGB8888.byte_size_of_pixels(rect.width() as usize);
+            let pitch = PixelFormatEnum::RGBA8888.byte_size_of_pixels(rect.width() as usize);
             texture
                 .update(translated_rect, &pixels, pitch)
                 .map_err(|e| e.to_string())?;

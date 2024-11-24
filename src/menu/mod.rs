@@ -10,6 +10,7 @@ use sdl2::rect::Rect;
 use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::ttf::{Font, Sdl2TtfContext};
 use sdl2::video::WindowContext;
+use crate::theme::helper::TextureFactory;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MenuAction {
@@ -131,10 +132,7 @@ impl<'a> MenuRow<'a> {
             name_text.width + font.height() as u32,
             font.height() as u32 + 10,
         );
-        let mut texture = texture_creator
-            .create_texture_target(None, rect.width(), rect.height())
-            .map_err(|e| e.to_string())?;
-        texture.set_blend_mode(BlendMode::Blend);
+        let mut texture = texture_creator.create_texture_target_blended(rect.width(), rect.height())?;
         canvas
             .with_texture_canvas(&mut texture, |c| {
                 c.set_draw_color(Color::RGBA(0, 0, 0, 0));
@@ -232,10 +230,7 @@ impl<'a> Menu<'a> {
             y += row_height as i32 + vertical_gutter as i32;
         }
 
-        let mut body_texture = texture_creator
-            .create_texture_target(None, body_width, body_height)
-            .map_err(|e| e.to_string())?;
-        body_texture.set_blend_mode(BlendMode::Blend);
+        let body_texture = texture_creator.create_texture_target_blended(body_width, body_height)?;
 
         let watermark_font_size = 3 * font_size / 5;
         let watermark_font = FontType::Retro.load(ttf, watermark_font_size)?;
@@ -282,10 +277,7 @@ impl<'a> Menu<'a> {
             SnippedTexture::new(texture.texture, rect)
         });
 
-        let mut select_list_background = texture_creator
-            .create_texture_target(None, body_width, row_height)
-            .map_err(|e| e.to_string())?;
-        select_list_background.set_blend_mode(BlendMode::Blend);
+        let mut select_list_background = texture_creator.create_texture_target_blended(body_width, row_height)?;
         canvas
             .with_texture_canvas(&mut select_list_background, |c| {
                 let rect = Rect::new(0, 0, body_width, row_height);

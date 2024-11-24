@@ -13,6 +13,7 @@ use sdl2::rect::{Point, Rect};
 use sdl2::render::{BlendMode, TextureCreator, WindowCanvas};
 use sdl2::ttf::Sdl2TtfContext;
 use sdl2::video::WindowContext;
+use crate::theme::helper::TextureFactory;
 
 const SPRITES: &[u8] = include_bytes!("sprites.png");
 
@@ -292,10 +293,7 @@ pub fn modern_theme<'a>(
         .chain(metrics_right.rows.into_iter())
         .collect::<Vec<GameMetricsRow>>();
 
-    let mut board_texture = texture_creator
-        .create_texture_target(None, board_snip.width(), board_snip.height())
-        .map_err(|e| e.to_string())?;
-    board_texture.set_blend_mode(BlendMode::Blend);
+    let mut board_texture = texture_creator.create_texture_target_blended(board_snip.width(), board_snip.height())?;
     canvas
         .with_texture_canvas(&mut board_texture, |c| {
             c.set_draw_color(Color::RGBA(0, 0, 0, 0));
@@ -317,10 +315,7 @@ pub fn modern_theme<'a>(
         .map_err(|e| e.to_string())?;
     let board_mask_texture = create_mask_texture(canvas, texture_creator, &board_texture)?;
 
-    let mut bg_texture = texture_creator
-        .create_texture_target(None, background_width, background_height)
-        .map_err(|e| e.to_string())?;
-    bg_texture.set_blend_mode(BlendMode::Blend);
+    let mut bg_texture = texture_creator.create_texture_target_blended(background_width, background_height)?;
     canvas
         .with_texture_canvas(&mut bg_texture, |c| {
             for row in all_metrics.iter() {
@@ -343,10 +338,7 @@ pub fn modern_theme<'a>(
     let (over_text_width, over_text_height) = game_over_font.string_size("OVER");
     let game_over_width = game_text_width.max(over_text_width);
     let game_over_height = game_text_height + vertical_gutter + over_text_height;
-    let mut game_over = texture_creator
-        .create_texture_target(None, game_over_width, game_over_height)
-        .map_err(|e| e.to_string())?;
-    game_over.set_blend_mode(BlendMode::Blend);
+    let mut game_over = texture_creator.create_texture_target_blended(game_over_width, game_over_height)?;
     canvas
         .with_texture_canvas(&mut game_over, |c| {
             let top_center = Rect::new(0, 0, game_over_width, game_text_height).center();

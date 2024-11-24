@@ -7,6 +7,7 @@ use sdl2::render::{BlendMode, Texture, TextureCreator, WindowCanvas};
 use sdl2::ttf::Sdl2TtfContext;
 use sdl2::video::WindowContext;
 use std::collections::HashMap;
+use crate::theme::helper::TextureFactory;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum FontAlign {
@@ -152,8 +153,7 @@ impl<'a> FontRender<'a> {
         sprites: Vec<FontSprite>,
         spacing: u32,
     ) -> Result<Self, String> {
-        let mut texture = texture_creator.load_texture_bytes(sprite_file)?;
-        texture.set_blend_mode(BlendMode::Blend);
+        let texture = texture_creator.load_texture_bytes_blended(sprite_file)?;
         let sprites = sprites.iter().map(|&x| (x.value, x.snip)).collect();
         Ok(Self {
             texture,
@@ -187,10 +187,7 @@ impl<'a> FontRender<'a> {
         let width: u32 = chars.iter().map(|(_, t)| t.width).sum();
         let height = chars.iter().map(|(_, t)| t.height).max().unwrap();
 
-        let mut texture = texture_creator
-            .create_texture_target(None, width, height)
-            .map_err(|e| e.to_string())?;
-        texture.set_blend_mode(BlendMode::Blend);
+        let mut texture = texture_creator.create_texture_target_blended(width, height)?;
 
         let mut sprites = HashMap::new();
         let mut x = 0;

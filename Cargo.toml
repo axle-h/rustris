@@ -20,20 +20,19 @@ pkgconfig = ["sdl2/use-pkgconfig"]
 retro_handheld = []
 
 [build-dependencies]
-built = { version = "0.7.2", default-features = false, features = [] }
-embed-resource = "2.4.2"
+built = { version = "0.7.5", default-features = false, features = [] }
+embed-resource = "3.0.1"
 
 [dependencies]
 rand = "0.8.5"
 rand_chacha = "0.3.1"
-serde = { version = "1.0.201", default-features = false, features = ["derive"] }
-serde_derive = "1.0.201"
-bitflags = "2.5.0"
-sdl2 = { version = "0.36.0", default-features = false, features = ["image","gfx","mixer","ttf"] }
+serde = { version = "1.0.215", default-features = false, features = ["derive"] }
+bitflags = "2.6.0"
+sdl2 = { version = "0.37.0", default-features = false, features = ["image","gfx","mixer","ttf"] }
 confy = { version = "0.6.1", default-features = false, features = ["yaml_conf"] }
 num-format = "0.4.4"
-strum = { version = "0.26.2", features = ["derive"] }
-strum_macros = "0.26.2"
+strum = { version = "0.26.3", features = ["derive"] }
+strum_macros = "0.26.4"
 
 [profile.release]
 strip = "symbols"

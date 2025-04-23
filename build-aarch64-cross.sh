@@ -17,4 +17,4 @@ docker cp rustris_aarch64:/app/target/aarch64-unknown-linux-gnu/release/rustris 
 
 docker rm -f rustris_aarch64
 
-scp $DEST/rustris ark@10.0.0.117:/roms/ports/rustris
+scp $DEST/rustris  root@10.0.0.117:/roms/ports/rustris

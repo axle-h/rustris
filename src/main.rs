@@ -486,32 +486,36 @@ impl TetrisSdl {
                 fixture.set_hard_dropping(*hard_dropping_player);
             }
 
+            let mut any_key_pressed = false;
             let events = inputs
                 .update(delta, self.event_pump.poll_iter())
                 .into_iter()
-                .flat_map(|input| match input {
-                    GameInputKey::MoveLeft { player } => fixture.mut_game(player, |g| g.left()),
-                    GameInputKey::MoveRight { player } => fixture.mut_game(player, |g| g.right()),
-                    GameInputKey::SoftDrop { player } => {
-                        fixture.mut_game(player, |g| g.set_soft_drop(true))
+                .flat_map(|input| {
+                    any_key_pressed = true;
+                    match input {
+                        GameInputKey::MoveLeft { player } => fixture.mut_game(player, |g| g.left()),
+                        GameInputKey::MoveRight { player } => fixture.mut_game(player, |g| g.right()),
+                        GameInputKey::SoftDrop { player } => {
+                            fixture.mut_game(player, |g| g.set_soft_drop(true))
+                        }
+                        GameInputKey::HardDrop { player } => {
+                            fixture.mut_game(player, |g| g.hard_drop())
+                        }
+                        GameInputKey::RotateClockwise { player } => {
+                            fixture.mut_game(player, |g| g.rotate(true))
+                        }
+                        GameInputKey::RotateAnticlockwise { player } => {
+                            fixture.mut_game(player, |g| g.rotate(false))
+                        }
+                        GameInputKey::Hold { player } => fixture.mut_game(player, |g| g.hold()),
+                        GameInputKey::Pause => match fixture.state() {
+                            MatchState::Normal | MatchState::Paused => fixture.toggle_paused(),
+                            _ => None,
+                        },
+                        GameInputKey::Quit => Some(GameEvent::Quit),
+                        GameInputKey::ReturnToMenu => Some(GameEvent::ReturnToMenu),
+                        GameInputKey::NextTheme => Some(GameEvent::NextTheme),
                     }
-                    GameInputKey::HardDrop { player } => {
-                        fixture.mut_game(player, |g| g.hard_drop())
-                    }
-                    GameInputKey::RotateClockwise { player } => {
-                        fixture.mut_game(player, |g| g.rotate(true))
-                    }
-                    GameInputKey::RotateAnticlockwise { player } => {
-                        fixture.mut_game(player, |g| g.rotate(false))
-                    }
-                    GameInputKey::Hold { player } => fixture.mut_game(player, |g| g.hold()),
-                    GameInputKey::Pause => match fixture.state() {
-                        MatchState::Normal | MatchState::Paused => fixture.toggle_paused(),
-                        _ => None,
-                    },
-                    GameInputKey::Quit => Some(GameEvent::Quit),
-                    GameInputKey::ReturnToMenu => Some(GameEvent::ReturnToMenu),
-                    GameInputKey::NextTheme => Some(GameEvent::NextTheme),
                 })
                 .collect::<Vec<GameEvent>>();
 
@@ -576,10 +580,12 @@ impl TetrisSdl {
                             _ => {}
                         }
                     }
-                    if let Some(high_score) = maybe_high_score {
-                        // start high score entry
-                        if game_over_done {
+                    if game_over_done {
+                        if let Some(high_score) = maybe_high_score {
+                            // start high score entry
                             return Ok(PostGameAction::NewHighScore(high_score));
+                        } else if any_key_pressed {
+                            return Ok(PostGameAction::ReturnToMenu);
                         }
                     }
                 }

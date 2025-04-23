@@ -3,7 +3,7 @@ use super::geometry::Point;
 use super::tetromino::{Tetromino, TetrominoShape};
 use crate::game::tetromino::Minos;
 
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
 use std::ops::Range;
 
@@ -24,9 +24,10 @@ pub fn compact_destroy_lines(lines: DestroyLines) -> Vec<u32> {
         .collect()
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Board {
     blocks: [BlockState; TOTAL_BLOCKS as usize],
-    tetromino: Option<Tetromino>,
+    tetromino: Option<Tetromino>
 }
 
 fn index_at(x: u32, y: u32) -> usize {
@@ -54,6 +55,44 @@ impl Board {
         }
     }
 
+    pub fn tetromino(&self) -> Option<Tetromino> {
+        self.tetromino
+    }
+
+    fn try_set_tetromino(&mut self, tetromino: Tetromino) -> Option<Minos> {
+        if self.tetromino.is_some() {
+            panic!("tetromino already set")
+        }
+
+        self.tetromino = Some(tetromino);
+        let mut success = true;
+        for (id, p) in tetromino.minos().into_iter().enumerate() {
+            if self.block(p).is_stack() {
+                success = false;
+            } else {
+                self.set_block(
+                    p,
+                    BlockState::Tetromino(tetromino.shape(), tetromino.rotation(), id as u32),
+                );
+            }
+        }
+        if success {
+            self.render_ghost();
+            Some(self.tetromino.unwrap().minos())
+        } else {
+            None
+        }
+    }
+    
+    pub fn clear_tetromino(&mut self) {
+        self.tetromino = None;
+        for i in 0 .. self.blocks.len() {
+            if self.blocks[i].is_tetromino() {
+                self.blocks[i] = BlockState::Empty;
+            }
+        }
+    }
+
     pub fn row(&self, y: u32) -> &[BlockState] {
         &self.blocks[row_range(y)]
     }
@@ -64,42 +103,16 @@ impl Board {
         }
     }
 
-    pub fn block(&self, point: Point) -> BlockState {
-        self.blocks[index(point)]
+    pub fn block<P : Into<Point>>(&self, point: P) -> BlockState {
+        self.blocks[index(point.into())]
     }
 
-    fn set_block(&mut self, point: Point, state: BlockState) {
-        self.blocks[index(point)] = state;
+    pub fn set_block<P : Into<Point>>(&mut self, point: P, state: BlockState) {
+        self.blocks[index(point.into())] = state;
     }
-
+    
     pub fn try_spawn_tetromino(&mut self, shape: TetrominoShape) -> Option<Minos> {
-        let tetromino = Tetromino::new(shape);
-        if self.tetromino.is_some() {
-            panic!("tetromino already spawned")
-        }
-
-        let minos = tetromino.minos();
-        let mut success = true;
-        for (id, p) in minos.into_iter().enumerate() {
-            if self.block(p).collides() {
-                success = false;
-            } else {
-                self.set_block(
-                    p,
-                    BlockState::Tetromino(tetromino.shape(), tetromino.rotation(), id as u32),
-                );
-            }
-        }
-
-        // regardless of success we have set blocks for this tetromino
-        self.tetromino = Some(tetromino);
-
-        if success {
-            self.render_ghost();
-            Some(self.tetromino.unwrap().minos())
-        } else {
-            None
-        }
+        self.try_set_tetromino(Tetromino::new(shape))
     }
 
     /// Moves the current tetromino left if possible
@@ -115,7 +128,7 @@ impl Board {
                 return false;
             }
             let block_left = self.block(p.translate(-1, 0));
-            if block_left.collides() {
+            if block_left.is_stack() {
                 // collided with the stack
                 return false;
             }
@@ -138,7 +151,7 @@ impl Board {
                 return false;
             }
             let block_right = self.block(p.translate(1, 0));
-            if block_right.collides() {
+            if block_right.is_stack() {
                 // collided with the stack
                 return false;
             }
@@ -227,7 +240,7 @@ impl Board {
                     success = false;
                     break;
                 }
-                if self.block(*p).collides() {
+                if self.block(*p).is_stack() {
                     success = false;
                     break;
                 }
@@ -268,7 +281,7 @@ impl Board {
                 return true;
             }
             let block_down = self.block(p.translate(0, -1));
-            if block_down.collides() {
+            if block_down.is_stack() {
                 // collided with the stack
                 return true;
             }
@@ -317,8 +330,7 @@ impl Board {
 
     /// Locks the current tetromino
     pub fn lock(&mut self) -> Option<Minos> {
-        self.tetromino?;
-        let tetromino = self.tetromino.unwrap();
+        let tetromino = self.tetromino?;
         for (id, p) in tetromino.minos().into_iter().enumerate() {
             self.set_block(
                 p,
@@ -334,7 +346,7 @@ impl Board {
         let mut result: DestroyLines = [None; MAX_DESTROYED_LINES];
         let mut index = 0;
         for y in 0..TOTAL_HEIGHT {
-            if self.row(y).iter().all(|b| b.collides()) {
+            if self.row(y).iter().all(|b| b.is_stack()) {
                 result[index] = Some(y);
                 index += 1;
                 if index == MAX_DESTROYED_LINES {
@@ -411,19 +423,31 @@ impl Board {
 
     pub fn is_stack_above_skyline(&self) -> bool {
         for block in &self.blocks[rows_range(BOARD_HEIGHT, TOTAL_HEIGHT - 1)] {
-            if block.collides() {
+            if block.is_stack() {
                 return true;
             }
         }
         false
     }
-}
 
-impl Display for Board {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    pub fn stack_height(&self) -> u32 {
+        let mut height = 0;
+        for y in 0..TOTAL_HEIGHT {
+            let row = self.row(y);
+            if row.iter().any(|b| b.is_stack() || b.is_tetromino()) {
+                height = y + 1
+            } else {
+                break
+            }
+        }
+        height
+    }
+
+    pub fn fmt(&self, f: &mut Formatter<'_>, render_empty_rows: bool) -> std::fmt::Result {
         writeln!(f, "   {}", "-".repeat(BOARD_WIDTH as usize))?;
 
-        for y in (0..TOTAL_HEIGHT).rev() {
+        let end = if render_empty_rows { TOTAL_HEIGHT } else { self.stack_height() };
+        for y in (0..end).rev() {
             if y == BUFFER_HEIGHT - 1 {
                 writeln!(f, "   {}", "-".repeat(BOARD_WIDTH as usize))?;
             }
@@ -445,6 +469,18 @@ impl Display for Board {
     }
 }
 
+impl Debug for Board {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.fmt(f, true)
+    }
+}
+
+impl Display for Board {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.fmt(f, false)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -452,28 +488,34 @@ mod tests {
 
     const NO_DESTROYED_LINES: DestroyLines = [None; MAX_DESTROYED_LINES];
 
-    macro_rules! spawn_tests {
-        ($($name:ident: $shape:expr => $points:expr),*) => {
-            $(
-                #[test]
-                fn $name() {
-                    let mut board = Board::new();
-                    can_spawn_tetromino(&mut board, $shape);
-                    should_have_tetromino_at(&board, &$points);
-                    should_have_n_tetromino_blocks(&board, 4);
-                }
-            )*
-        };
-    }
+    #[allow(non_snake_case)]
+    mod spawn_tests {
+        use super::*;
 
-    spawn_tests! {
-        spawn_i: TetrominoShape::I => [Point::new(3, 20), Point::new(4, 20), Point::new(5, 20), Point::new(6, 20)],
-        spawn_o: TetrominoShape::O => [Point::new(4, 20), Point::new(5, 20), Point::new(4, 21), Point::new(5, 21)],
-        spawn_t: TetrominoShape::T => [Point::new(3, 20), Point::new(4, 20), Point::new(5, 20), Point::new(4, 21)],
-        spawn_s: TetrominoShape::S => [Point::new(3, 20), Point::new(4, 20), Point::new(4, 21), Point::new(5, 21)],
-        spawn_z: TetrominoShape::Z => [Point::new(4, 20), Point::new(5, 20), Point::new(3, 21), Point::new(4, 21)],
-        spawn_j: TetrominoShape::J => [Point::new(3, 20), Point::new(4, 20), Point::new(5, 20), Point::new(3, 21)],
-        spawn_l: TetrominoShape::L => [Point::new(3, 20), Point::new(4, 20), Point::new(5, 20), Point::new(5, 21)]
+        macro_rules! spawn_tests {
+            ($($name:ident: $points:expr),*) => {
+                $(
+                    #[test]
+                    fn $name() {
+                        let mut board = Board::new();
+                        let shape = TetrominoShape::$name;
+                        can_spawn_tetromino(&mut board, shape);
+                        should_have_tetromino_at(&board, &$points);
+                        should_have_n_tetromino_blocks(&board, 4);
+                    }
+                )*
+            };
+        }
+    
+        spawn_tests! {
+            I: [Point::new(3, 20), Point::new(4, 20), Point::new(5, 20), Point::new(6, 20)],
+            O: [Point::new(4, 20), Point::new(5, 20), Point::new(4, 21), Point::new(5, 21)],
+            T: [Point::new(3, 20), Point::new(4, 20), Point::new(5, 20), Point::new(4, 21)],
+            S: [Point::new(3, 20), Point::new(4, 20), Point::new(4, 21), Point::new(5, 21)],
+            Z: [Point::new(4, 20), Point::new(5, 20), Point::new(3, 21), Point::new(4, 21)],
+            J: [Point::new(3, 20), Point::new(4, 20), Point::new(5, 20), Point::new(3, 21)],
+            L: [Point::new(3, 20), Point::new(4, 20), Point::new(5, 20), Point::new(5, 21)]
+        }
     }
 
     fn can_spawn_tetromino(board: &mut Board, shape: TetrominoShape) {
@@ -951,5 +993,27 @@ mod tests {
         assert!(!board.is_stack_above_skyline(), "{}", board);
         having_stack_row(&mut board, BOARD_HEIGHT);
         assert!(board.is_stack_above_skyline(), "{}", board);
+    }
+
+
+    #[test]
+    fn stack_height_0() {
+        assert_eq!(Board::new().stack_height(), 0);
+    }
+
+    #[test]
+    fn stack_height_1() {
+        let mut board = Board::new();
+        having_stack_at(&mut board, 0, 0);
+        having_stack_at(&mut board, 1, 0);
+        assert_eq!(board.stack_height(), 1);
+    }
+    
+    #[test]
+    fn stack_height_2() {
+        let mut board = Board::new();
+        having_stack_at(&mut board, 1, 0);
+        having_stack_at(&mut board, 1, 1);
+        assert_eq!(board.stack_height(), 2);
     }
 }

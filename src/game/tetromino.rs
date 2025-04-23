@@ -248,6 +248,11 @@ impl TetrominoMeta {
     pub fn outside_corners(&self) -> MinoCorners {
         self.outside_corners
     }
+
+    #[cfg(test)]
+    pub fn spawn_point(&self) -> Point {
+        self.spawn_point
+    }
 }
 
 const I: TetrominoMeta = TetrominoMeta {
@@ -398,33 +403,34 @@ const Z: TetrominoMeta = TetrominoMeta {
     bounding_box: 3,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Tetromino {
-    meta: TetrominoMeta,
+    shape: TetrominoShape,
     position: Point,
     rotation: Rotation,
-    minos: Minos,
     lock_placements: u32,
     y_min: i32,
 }
 
 impl Tetromino {
     pub fn new(shape: TetrominoShape) -> Self {
-        let meta = shape.meta();
+        let position = shape.meta().spawn_point;
         Self {
-            meta: *meta,
-            position: meta.spawn_point,
-            rotation: Rotation::North,
-            minos: meta
-                .rotated_minos(Rotation::North)
-                .map(|p| p + meta.spawn_point),
+            shape,
+            position,
+            rotation: Rotation::default(),
             lock_placements: 0,
-            y_min: meta.spawn_point.y,
+            y_min: position.y,
         }
     }
 
+    #[cfg(test)]
+    pub fn position(&self) -> Point {
+        self.position
+    }
+
     pub fn shape(&self) -> TetrominoShape {
-        self.meta.shape
+        self.shape
     }
 
     pub fn rotation(&self) -> Rotation {
@@ -432,37 +438,40 @@ impl Tetromino {
     }
 
     pub fn minos(&self) -> Minos {
-        self.minos
+        self
+            .meta()
+            .rotated_minos(self.rotation)
+            .map(|p| p + self.position)
     }
 
     pub fn translate(&mut self, x: i32, y: i32) {
         self.translate_point(Point::new(x, y));
     }
+    
+    pub fn meta(&self) -> &TetrominoMeta {
+        self.shape.meta()
+    }
 
     pub fn possible_minos_after_rotation(&self, clockwise: bool) -> Vec<Minos> {
         let to_rotation = self.rotation.rotate(clockwise);
-        let basic_rotation_minos = self.meta.rotated_minos(to_rotation);
-        return self
-            .meta
+        let meta = self.meta();
+        let basic_rotation_minos = meta.rotated_minos(to_rotation);
+        meta
             .wall_kicks(self.rotation, to_rotation)
             .iter()
             .map(|kick| basic_rotation_minos.map(|p| p + self.position + *kick))
-            .collect::<Vec<Minos>>();
+            .collect::<Vec<Minos>>()
     }
 
     pub fn rotate(&mut self, clockwise: bool, wall_kick_id: usize) {
         let to_rotation = self.rotation.rotate(clockwise);
-        let wall_kick = self.meta.wall_kicks(self.rotation, to_rotation)[wall_kick_id];
+        let wall_kick = self.meta().wall_kicks(self.rotation, to_rotation)[wall_kick_id];
         self.rotation = to_rotation;
         self.translate_point(wall_kick);
     }
 
     fn translate_point(&mut self, p: Point) {
         self.position += p;
-        self.minos = self
-            .meta
-            .rotated_minos(self.rotation)
-            .map(|p| p + self.position);
         if self.position.y < self.y_min {
             self.y_min = self.position.y;
             // lock placements are reset every time a tetromino falls

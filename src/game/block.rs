@@ -1,7 +1,7 @@
 use super::tetromino::TetrominoShape;
 use crate::game::geometry::Rotation;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum BlockState {
     Empty,
     Tetromino(TetrominoShape, Rotation, u32),
@@ -11,7 +11,15 @@ pub enum BlockState {
 }
 
 impl BlockState {
-    pub fn collides(&self) -> bool {
+    pub fn is_stack(&self) -> bool {
         matches!(self, BlockState::Garbage | BlockState::Stack(_, _, _))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        matches!(self, BlockState::Empty | BlockState::Ghost(_, _, _))
+    }
+
+    pub fn is_tetromino(&self) -> bool {
+        matches!(self, BlockState::Tetromino(_, _, _))
     }
 }

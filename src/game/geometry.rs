@@ -1,10 +1,20 @@
+use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
 use std::ops::{Add, AddAssign, Neg, Sub};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd)]
 pub struct Point {
     pub x: i32,
     pub y: i32,
+}
+
+impl Ord for Point {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.x.cmp(&other.x) {
+            Ordering::Equal => self.y.cmp(&other.y),
+            other => other,
+        }
+    }
 }
 
 impl Display for Point {
@@ -16,6 +26,10 @@ impl Display for Point {
 impl Point {
     pub const fn new(x: i32, y: i32) -> Point {
         Point { x, y }
+    }
+
+    pub const fn from_u32(x: u32, y: u32) -> Point {
+        Point { x: x as i32, y: y as i32 }
     }
 
     pub fn translate(&self, x: i32, y: i32) -> Point {
@@ -43,6 +57,12 @@ impl Point {
 impl From<(i32, i32)> for Point {
     fn from((x, y): (i32, i32)) -> Self {
         Point::new(x, y)
+    }
+}
+
+impl From<(u32, u32)> for Point {
+    fn from((x, y): (u32, u32)) -> Self {
+        Point::from_u32(x, y)
     }
 }
 
@@ -77,13 +97,20 @@ impl AddAssign for Point {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Rotation {
     North,
     East,
     South,
     West,
 }
+
+impl Default for Rotation {
+    fn default() -> Self {
+        Self::North
+    }
+}
+
 impl Rotation {
     pub fn rotate(&self, clockwise: bool) -> Rotation {
         match self {

@@ -113,6 +113,10 @@ pub enum MatchState {
 }
 
 impl MatchState {
+    pub fn is_normal(&self) -> bool {
+        self == &MatchState::Normal
+    }
+    
     pub fn is_paused(&self) -> bool {
         self == &MatchState::Paused
     }
@@ -230,19 +234,25 @@ impl Match {
             .animate_game_over(animation_type);
     }
 
-    pub fn mut_game<F>(&mut self, player: u32, mut f: F) -> Option<GameEvent>
+    pub fn events(&mut self) -> Vec<GameEvent> {
+        self.players.iter_mut()
+            .flat_map(|p| p.game.empty_event_buffer())
+            .collect::<Vec<GameEvent>>()
+    }
+    
+    pub fn mut_game<F>(&mut self, player: u32, mut f: F) -> bool
     where
-        F: FnMut(&mut Game) -> Option<GameEvent>,
+        F: FnMut(&mut Game) -> bool,
     {
         debug_assert!(player > 0);
 
-        match self.state {
-            MatchState::Normal => match self.players.get_mut(player as usize - 1) {
-                Some(player) if !player.is_hard_dropping => f(&mut player.game),
-                _ => None,
-            },
-            _ => None,
+        if self.state.is_normal() {
+            let player = self.players.get_mut(player as usize - 1).unwrap();
+            if !player.is_hard_dropping {
+                return f(&mut player.game);
+            }
         }
+        false
     }
 
     pub fn player(&self, player: u32) -> &Player {

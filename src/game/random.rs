@@ -112,7 +112,7 @@ impl RandomTetromino {
         result
     }
 
-    pub fn peek(&self) -> [TetrominoShape; PEEK_SIZE] {
+    pub fn peek_buffer(&self) -> [TetrominoShape; PEEK_SIZE] {
         self.queue
             .iter()
             .take(PEEK_SIZE)
@@ -120,6 +120,10 @@ impl RandomTetromino {
             .collect::<Vec<TetrominoShape>>()
             .try_into()
             .unwrap()
+    }
+    
+    pub fn peek(&self) -> TetrominoShape {
+        *self.queue.front().unwrap()
     }
 
     fn assert_bags(&mut self) {
@@ -172,7 +176,7 @@ mod tests {
     #[test]
     fn bag_random_peek() {
         let mut random = RandomMode::Bag.build(1, 10).pop().unwrap();
-        let peek = random.peek();
+        let peek = random.peek_buffer();
         let observed: [TetrominoShape; PEEK_SIZE] =
             next_n(&mut random, PEEK_SIZE).try_into().unwrap();
         assert_eq!(observed, peek);
@@ -189,7 +193,7 @@ mod tests {
     #[test]
     fn true_random_peek() {
         let mut random = RandomMode::True.build(1, 10).pop().unwrap();
-        let peek = random.peek();
+        let peek = random.peek_buffer();
         let observed: [TetrominoShape; PEEK_SIZE] =
             next_n(&mut random, PEEK_SIZE).try_into().unwrap();
         assert_eq!(observed, peek);

@@ -101,3 +101,34 @@ There are no default player 2 controls.
 * t-spin
 * critical music
 * game boy color theme
+
+# AI
+
+For each piece, calculate all possible positions and calculate the cost of each, choose the position with the best cost.
+Cost parameters:
+* Closed holes (a gap that cannot be filled without clearing a line)
+* Open holes (a gap under a tetromino that can be filled)
+* Max height of the stack
+* bumpiness (the amount that the line height changes from left to right)
+* optimising for tetris:
+   * bad: blocks in the right most lane
+   * bad: clearing less that 4 lines
+   * good: clearing a tetris
+
+Algorithm:
+
+1. wait until a frame where a tetromino is spawned
+2. calculate lowest cost for spawned tetromino
+3. if none held: calculate lowest cost for next tetromino
+   if one held: calculate lowest cost for held tetromino
+4. take the tetromino and position with lowest cost
+5. press hold if held or next tetromino was chosen
+6. apply input sequence of chosen position
+7. hard drop
+8. repeat
+
+TODO
+
+* Fix hold not working, probably need to add state to use the alt on the next frame
+* When calculating cost also consider destroyed lines
+* Add new cost for number of cleared blocks

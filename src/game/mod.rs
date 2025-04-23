@@ -14,6 +14,7 @@ pub mod board;
 pub mod geometry;
 pub mod random;
 pub mod tetromino;
+pub mod ai;
 
 const LINES_PER_LEVEL: u32 = 10;
 const SOFT_DROP_STEP_FACTOR: u32 = 20;
@@ -92,6 +93,7 @@ pub struct Game {
     skip_next_spawn_delay: bool,
     hold: Option<HoldState>,
     garbage_buffer: u32,
+    event_buffer: Vec<GameEvent>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -121,24 +123,31 @@ impl Game {
             skip_next_spawn_delay: false,
             hold: None,
             garbage_buffer: 0,
+            event_buffer: Vec::new(),
         }
     }
 
+    pub fn empty_event_buffer(&mut self) -> Vec<GameEvent> {
+        let result = self.event_buffer.iter().copied().collect::<Vec<_>>();
+        self.event_buffer.clear();
+        result
+    }
+    
     pub fn level(&self) -> u32 {
         self.level
     }
 
-    pub fn hold(&mut self) -> Option<GameEvent> {
+    pub fn hold(&mut self) -> bool {
         if !(matches!(self.state, GameState::Fall(_))
             || matches!(self.state, GameState::Lock(duration) if duration < LOCK_DURATION))
             || matches!(self.hold, Some(HoldState { locked: true, .. }))
         {
             // hold is blocked
-            return None;
+            return false;
         }
 
         let held_shape = match self.board.hold() {
-            None => return None,
+            None => return false,
             Some(shape) => shape,
         };
 
@@ -152,29 +161,35 @@ impl Game {
             locked: true,
             shape: held_shape,
         });
-        Some(GameEvent::Hold)
+        self.event_buffer.push(GameEvent::Hold);
+        true
     }
 
-    pub fn set_soft_drop(&mut self, soft_drop: bool) -> Option<GameEvent> {
+    pub fn set_soft_drop(&mut self, soft_drop: bool) -> bool {
         self.soft_drop = soft_drop;
         if soft_drop {
-            Some(GameEvent::SoftDrop)
-        } else {
-            None
+            self.event_buffer.push(GameEvent::SoftDrop);
         }
+        soft_drop
     }
 
-    pub fn hard_drop(&mut self) -> Option<GameEvent> {
-        self.board.hard_drop().map(|(hard_dropped_rows, minos)| {
+    pub fn hard_drop(&mut self) -> bool {
+        if let Some((hard_dropped_rows, minos)) = self.board.hard_drop() {
             self.state = GameState::HardDropLock;
             self.score += hard_dropped_rows * HARD_DROP_POINTS_PER_ROW;
             self.skip_next_spawn_delay = true;
-            GameEvent::HardDrop {
-                player: self.player,
-                minos,
-                dropped_rows: hard_dropped_rows,
-            }
-        })
+
+            self.event_buffer.push(
+                GameEvent::HardDrop {
+                    player: self.player,
+                    minos,
+                    dropped_rows: hard_dropped_rows,
+                }
+            );
+            true
+        } else {
+            false
+        }
     }
 
     pub fn metrics(&self) -> GameMetrics {
@@ -184,32 +199,35 @@ impl Game {
             lines: self.lines,
             score: self.score,
             combo: self.combo,
-            queue: self.random.peek(),
+            queue: self.random.peek_buffer(),
             hold: self.hold.map(|h| h.shape),
         }
     }
 
-    pub fn left(&mut self) -> Option<GameEvent> {
+    pub fn left(&mut self) -> bool {
         if self.with_checking_lock(|board| board.left()) {
-            Some(GameEvent::Move)
+            self.event_buffer.push(GameEvent::Move);
+            true
         } else {
-            None
+            false
         }
     }
 
-    pub fn right(&mut self) -> Option<GameEvent> {
+    pub fn right(&mut self) -> bool {
         if self.with_checking_lock(|board| board.right()) {
-            Some(GameEvent::Move)
+            self.event_buffer.push(GameEvent::Move);
+            true
         } else {
-            None
+            false
         }
     }
 
-    pub fn rotate(&mut self, clockwise: bool) -> Option<GameEvent> {
+    pub fn rotate(&mut self, clockwise: bool) -> bool {
         if self.with_checking_lock(|board| board.rotate(clockwise)) {
-            Some(GameEvent::Rotate)
+            self.event_buffer.push(GameEvent::Rotate);
+            true
         } else {
-            None
+            false
         }
     }
 

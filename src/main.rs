@@ -63,6 +63,8 @@ use std::str::FromStr;
 
 use crate::menu::sound::MenuSound;
 use theme_context::{PlayerTextures, TextureMode, ThemeContext};
+use crate::game::ai::agent::AiAgent;
+use crate::game::ai::board_cost::{BoardCost, CostCoefficients};
 use crate::icon::app_icon;
 
 #[cfg(not(feature = "retro_handheld"))]
@@ -476,6 +478,8 @@ impl TetrisSdl {
         let mut max_level = 0;
         let mut frame_rate = FrameRate::new();
 
+        let mut ai = AiAgent::new(BoardCost::new(CostCoefficients::SENSIBLE_DEFAULTS));
+        
         loop {
             let delta = frame_rate.update()?;
 
@@ -487,39 +491,53 @@ impl TetrisSdl {
             }
 
             let mut any_key_pressed = false;
-            let events = inputs
-                .update(delta, self.event_pump.poll_iter())
-                .into_iter()
-                .flat_map(|input| {
-                    any_key_pressed = true;
-                    match input {
-                        GameInputKey::MoveLeft { player } => fixture.mut_game(player, |g| g.left()),
-                        GameInputKey::MoveRight { player } => fixture.mut_game(player, |g| g.right()),
-                        GameInputKey::SoftDrop { player } => {
-                            fixture.mut_game(player, |g| g.set_soft_drop(true))
-                        }
-                        GameInputKey::HardDrop { player } => {
-                            fixture.mut_game(player, |g| g.hard_drop())
-                        }
-                        GameInputKey::RotateClockwise { player } => {
-                            fixture.mut_game(player, |g| g.rotate(true))
-                        }
-                        GameInputKey::RotateAnticlockwise { player } => {
-                            fixture.mut_game(player, |g| g.rotate(false))
-                        }
-                        GameInputKey::Hold { player } => fixture.mut_game(player, |g| g.hold()),
-                        GameInputKey::Pause => match fixture.state() {
-                            MatchState::Normal | MatchState::Paused => fixture.toggle_paused(),
-                            _ => None,
-                        },
-                        GameInputKey::Quit => Some(GameEvent::Quit),
-                        GameInputKey::ReturnToMenu => Some(GameEvent::ReturnToMenu),
-                        GameInputKey::NextTheme => Some(GameEvent::NextTheme),
-                    }
-                })
-                .collect::<Vec<GameEvent>>();
+            let mut meta_events = vec![];
+            for input in inputs.update(delta, self.event_pump.poll_iter()) {
+                any_key_pressed = true;
 
-            for event in events.into_iter() {
+                match input {
+                    GameInputKey::MoveLeft { player } => {
+                        fixture.mut_game(player, |g| g.left());
+                    },
+                    GameInputKey::MoveRight { player } => {
+                        fixture.mut_game(player, |g| g.right());
+                    },
+                    GameInputKey::SoftDrop { player } => {
+                        fixture.mut_game(player, |g| g.set_soft_drop(true));
+                    }
+                    GameInputKey::HardDrop { player } => {
+                        fixture.mut_game(player, |g| g.hard_drop());
+                    }
+                    GameInputKey::RotateClockwise { player } => {
+                        fixture.mut_game(player, |g| g.rotate(true));
+                    }
+                    GameInputKey::RotateAnticlockwise { player } => {
+                        fixture.mut_game(player, |g| g.rotate(false));
+                    }
+                    GameInputKey::Hold { player } => {
+                        fixture.mut_game(player, |g| g.hold());
+                    },
+
+                    GameInputKey::Pause => {
+                        if let MatchState::Normal | MatchState::Paused = fixture.state() {
+                            if let Some(paused_event) = fixture.toggle_paused() {
+                                meta_events.push(paused_event);
+                            }
+                        }
+                    },
+                    GameInputKey::Quit => meta_events.push(GameEvent::Quit),
+                    GameInputKey::ReturnToMenu => meta_events.push(GameEvent::ReturnToMenu),
+                    GameInputKey::NextTheme => meta_events.push(GameEvent::NextTheme),
+                }
+            }
+            
+            // TODO
+            if !fixture.mut_game(1, |g| ai.act(g)) {
+                
+            }
+            
+
+            for event in fixture.events().into_iter().chain(meta_events) {
                 match event {
                     GameEvent::Quit => return Ok(PostGameAction::Quit),
                     GameEvent::ReturnToMenu => return Ok(PostGameAction::ReturnToMenu), // even if high score?!

@@ -7,4 +7,5 @@ pub mod agent;
 mod headless;
 pub mod genetic;
 mod game_result;
+mod stats;
 

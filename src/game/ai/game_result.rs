@@ -1,4 +1,4 @@
-use std::ops::{Add, Div};
+use std::ops::{Add, Div, Sub};
 use std::cmp::Ordering;
 use std::iter::Sum;
 
@@ -36,6 +36,14 @@ impl Add for GameResult {
             lines: self.lines + rhs.lines,
             level: self.level + rhs.level,
         }
+    }
+}
+
+impl Sub for GameResult {
+    type Output = f32;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        self.score as f32 - rhs.score as f32
     }
 }
 

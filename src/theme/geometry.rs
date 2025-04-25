@@ -31,16 +31,16 @@ impl BoardGeometry {
         }
     }
 
-    fn j_to_y(&self, j: u32) -> u32 {
-        self.visible_height - ((j + 1) * self.block_size) + self.offset.y() as u32
+    fn j_to_y(&self, j: u32) -> i32 {
+        self.visible_height as i32 - ((j + 1) * self.block_size) as i32 + self.offset.y()
     }
 
-    fn i_to_x(&self, i: u32) -> u32 {
-        i * self.block_size + self.offset.x() as u32
+    fn i_to_x(&self, i: u32) -> i32 {
+        i as i32 * self.block_size as i32 + self.offset.x()
     }
 
     pub fn mino_point(&self, i: u32, j: u32) -> Point {
-        Point::new(self.i_to_x(i) as i32, self.j_to_y(j) as i32)
+        Point::new(self.i_to_x(i), self.j_to_y(j))
     }
 
     pub fn block_size(&self) -> u32 {
@@ -65,8 +65,8 @@ impl BoardGeometry {
 
     pub fn line_snip(&self, j: u32) -> Rect {
         Rect::new(
-            self.i_to_x(0) as i32,
-            self.j_to_y(j) as i32,
+            self.i_to_x(0),
+            self.j_to_y(j),
             self.width,
             self.block_size,
         )
@@ -74,8 +74,8 @@ impl BoardGeometry {
 
     pub fn mino_rect(&self, i: u32, j: u32) -> Rect {
         Rect::new(
-            self.i_to_x(i) as i32,
-            self.j_to_y(j) as i32,
+            self.i_to_x(i),
+            self.j_to_y(j),
             self.block_size,
             self.block_size,
         )

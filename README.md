@@ -111,7 +111,7 @@ Cost parameters:
 * Max height of the stack
 * bumpiness (the amount that the line height changes from left to right)
 * optimising for tetris:
-   * bad: blocks in the right most lane
+   * bad: blocks in the right most column
    * bad: clearing less that 4 lines
    * good: clearing a tetris
 
@@ -130,5 +130,4 @@ Algorithm:
 TODO
 
 * Fix hold not working, probably need to add state to use the alt on the next frame
-* When calculating cost also consider destroyed lines
 * Add new cost for number of cleared blocks

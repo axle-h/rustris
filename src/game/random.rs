@@ -2,8 +2,8 @@ use super::tetromino::TetrominoShape;
 use crate::game::board::BOARD_WIDTH;
 use rand::prelude::*;
 use rand::seq::SliceRandom;
-use rand::{thread_rng, Rng};
-use rand_chacha::{ChaCha8Rng, ChaChaRng};
+use rand::{Rng};
+use rand_chacha::{ChaChaRng};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
@@ -19,10 +19,12 @@ const ALL_SHAPES: [TetrominoShape; 7] = [
 ];
 
 fn rand_shape<R: Rng>(rng: &mut R) -> TetrominoShape {
-    ALL_SHAPES[rng.gen_range(0..ALL_SHAPES.len())]
+    ALL_SHAPES[rng.random_range(0..ALL_SHAPES.len())]
 }
 
-type Seed = <ChaCha8Rng as SeedableRng>::Seed;
+pub fn new_seed() -> u64 {
+    rand::rng().random()
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RandomMode {
@@ -34,14 +36,14 @@ pub enum RandomMode {
 
 impl RandomMode {
     pub fn build(self, count: usize, min_garbage_per_hole: u32) -> Vec<RandomTetromino> {
-        let mut seed: Seed = Default::default();
-        thread_rng().fill(&mut seed);
+        let seed = new_seed();
         (0..count)
             .map(|_| RandomTetromino::new(self, min_garbage_per_hole, seed))
             .collect()
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct RandomTetromino {
     random_mode: RandomMode,
     min_garbage_per_hole: u32, // move the garbage hole every n garbage
@@ -52,9 +54,9 @@ pub struct RandomTetromino {
 }
 
 impl RandomTetromino {
-    pub fn new(random_mode: RandomMode, min_garbage_per_hole: u32, seed: Seed) -> Self {
-        let mut rng = ChaChaRng::from_seed(seed);
-        let current_garbage_hole = rng.gen_range(0..BOARD_WIDTH);
+    pub fn new(random_mode: RandomMode, min_garbage_per_hole: u32, seed: u64) -> Self {
+        let mut rng = ChaChaRng::seed_from_u64(seed);
+        let current_garbage_hole = rng.random_range(0..BOARD_WIDTH);
         match random_mode {
             RandomMode::True => {
                 let queue = (0..PEEK_SIZE)
@@ -89,7 +91,7 @@ impl RandomTetromino {
         self.garbage_since_last_hole += 1;
         if self.garbage_since_last_hole >= self.min_garbage_per_hole {
             self.garbage_since_last_hole = 0;
-            self.current_garbage_hole = self.rng.gen_range(0..BOARD_WIDTH);
+            self.current_garbage_hole = self.rng.random_range(0..BOARD_WIDTH);
         }
         result
     }

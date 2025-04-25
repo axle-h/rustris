@@ -65,6 +65,7 @@ use crate::menu::sound::MenuSound;
 use theme_context::{PlayerTextures, TextureMode, ThemeContext};
 use crate::game::ai::agent::AiAgent;
 use crate::game::ai::board_cost::{BoardCost, CostCoefficients};
+use crate::game::ai::genetic::ga_main;
 use crate::icon::app_icon;
 
 #[cfg(not(feature = "retro_handheld"))]
@@ -166,7 +167,7 @@ impl TetrisSdl {
         let audio = sdl.audio()?;
         sdl2::mixer::open_audio(44_100, AUDIO_S16LSB, DEFAULT_CHANNELS, 512)?;
         let _mixer_context = sdl2::mixer::init(MixerInitFlag::OGG)?;
-        sdl2::mixer::allocate_channels((MAX_PLAYERS * MIX_CHANNELS) as i32);
+        sdl2::mixer::allocate_channels((MAX_PLAYERS * 32) as i32);
         sdl2::mixer::Music::set_volume(config.audio.music_volume());
         let menu_sound = MenuSound::new(config.audio)?;
 
@@ -793,8 +794,11 @@ impl TetrisSdl {
         }
     }
 }
-
 fn main() -> Result<(), String> {
+    ga_main()
+}
+
+fn main2() -> Result<(), String> {
     let mut rustris = TetrisSdl::new()?;
     let texture_creator = rustris.canvas.texture_creator();
     let (_, window_height) = rustris.canvas.window().size();

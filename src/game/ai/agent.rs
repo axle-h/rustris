@@ -1,3 +1,4 @@
+use std::hash::Hash;
 use crate::game::ai::apply_inputs::ApplyInputs;
 use crate::game::ai::board_cost::BoardCost;
 use crate::game::ai::input_search::InputSearch;
@@ -42,29 +43,31 @@ impl AiAgent {
             let (best_inputs, _) = best_result.unwrap();
 
 
-            println!("{:?}", best_inputs);
+            // println!("{:?}", best_inputs);
             
             if is_alt {
                 // return and wait for a tetromino
                 return game.hold()
             }
 
-            if !game.apply_inputs(best_inputs) {
-                panic!("cannot apply inputs")
-            }
-            if !game.hard_drop() {
-                panic!("cannot hard drop")
-            }
-            true
+            game.apply_inputs(best_inputs) && game.hard_drop()
         } else {
             false
         }
     }
     
     fn best_move(&self, game: &Game, shape: TetrominoShape) -> Option<(InputSequence, f32)> {
-        game.board.search_all_inputs(shape)
+        let moves: Vec<_> = game.board.search_all_inputs(shape)
             .into_iter()
             .map(|r| (r.inputs(), self.cost.cost(r.board())))
-            .min_by(|(_, c1), (_, c2)| c1.total_cmp(&c2))
+            .collect();
+        
+        if moves.is_empty() {
+            return None;
+        }
+
+        moves.into_iter().max_by(|(inputs1, cost1), (inputs2, cost2)| {
+            cost1.total_cmp(cost2).then_with(|| inputs1.cmp(inputs2))
+        })
     }
 }

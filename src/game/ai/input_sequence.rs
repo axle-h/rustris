@@ -1,6 +1,7 @@
+use std::cmp::Ordering;
 use crate::game::geometry::Rotation;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Hash, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct InputSequence {
     lefts: u32,
     rights: u32,
@@ -51,12 +52,17 @@ impl InputSequence {
 }
 
 impl Ord for InputSequence {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> Ordering {
         self.lefts.cmp(&other.lefts)
             .then(self.rights.cmp(&other.rights))
             .then(self.rotation.cmp(&other.rotation))
     }
+}
 
+impl PartialOrd for InputSequence {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 #[cfg(test)]

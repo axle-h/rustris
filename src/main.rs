@@ -66,6 +66,7 @@ use theme_context::{PlayerTextures, TextureMode, ThemeContext};
 use crate::game::ai::agent::AiAgent;
 use crate::game::ai::board_cost::{BoardCost, CostCoefficients};
 use crate::game::ai::genetic::ga_main;
+use crate::game::random::PEEK_SIZE;
 use crate::icon::app_icon;
 
 #[cfg(not(feature = "retro_handheld"))]
@@ -479,7 +480,7 @@ impl TetrisSdl {
         let mut max_level = 0;
         let mut frame_rate = FrameRate::new();
 
-        let mut ai = AiAgent::new(BoardCost::new(CostCoefficients::SENSIBLE_DEFAULTS));
+        let mut ai = AiAgent::new(BoardCost::new(CostCoefficients::SENSIBLE_DEFAULTS), PEEK_SIZE);
         
         loop {
             let delta = frame_rate.update()?;
@@ -533,9 +534,10 @@ impl TetrisSdl {
             }
             
             // TODO
-            if !fixture.mut_game(1, |g| ai.act(g)) {
-                
-            }
+            fixture.mut_game(1, |g| {
+                ai.act(g);
+                true
+            });
             
 
             for event in fixture.events().into_iter().chain(meta_events) {

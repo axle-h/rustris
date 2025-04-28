@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
 use std::ops::{Add, AddAssign, Neg, Sub};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Point {
     pub x: i32,
     pub y: i32,
@@ -10,10 +10,13 @@ pub struct Point {
 
 impl Ord for Point {
     fn cmp(&self, other: &Self) -> Ordering {
-        match self.x.cmp(&other.x) {
-            Ordering::Equal => self.y.cmp(&other.y),
-            other => other,
-        }
+        self.x.cmp(&other.x).then_with(|| self.y.cmp(&other.y))
+    }
+}
+
+impl PartialOrd for Point {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 

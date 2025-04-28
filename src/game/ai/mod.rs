@@ -8,4 +8,6 @@ mod headless;
 pub mod genetic;
 mod game_result;
 mod stats;
+mod mutation;
+mod generation_stats;
 

@@ -8,7 +8,7 @@ use std::time::Duration;
 
 const MAX_FLASHES: u32 = 3;
 const FLASH_DURATION: Duration = Duration::from_millis(250);
-const SWEEP_DURATION: Duration = Duration::from_millis(750);
+pub const SWEEP_DURATION: Duration = Duration::from_millis(750);
 const PARTICLE_FADE_IN_DURATION: Duration = Duration::from_millis(750);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

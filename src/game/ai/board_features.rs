@@ -7,7 +7,8 @@ pub struct StackStats {
     open_holes: u32,
     closed_holes: u32,
     max_heights: [u32; BOARD_WIDTH as usize],
-    delta_height: u32,
+    sum_delta_height: u32,
+    max_delta_height: u32,
     cleared_lines: u32,
 }
 
@@ -24,8 +25,12 @@ impl StackStats {
         self.max_heights
     }
 
-    pub fn delta_height(&self) -> u32 {
-        self.delta_height
+    pub fn sum_delta_height(&self) -> u32 {
+        self.sum_delta_height
+    }
+    
+    pub fn max_delta_height(&self) -> u32 {
+        self.max_delta_height
     }
 
     pub fn cleared_lines(&self) -> u32 {
@@ -89,10 +94,13 @@ impl BoardFeatures for Board {
         }
 
         let mut last_height: Option<u32> = None;
-        let mut delta_height = 0;
+        let mut max_delta_height = 0;
+        let mut sum_delta_height = 0;
 
         for height in max_heights {
-            delta_height += last_height.map(|h| h.abs_diff(height)).unwrap_or(0);
+            let next_delta_height = last_height.map(|h| h.abs_diff(height)).unwrap_or(0);
+            max_delta_height = max_delta_height.max(next_delta_height);
+            sum_delta_height += next_delta_height;
             last_height = Some(height);
         }
 
@@ -100,7 +108,8 @@ impl BoardFeatures for Board {
             open_holes: open_holes.len() as u32,
             closed_holes: (holes.len() - open_holes.len()) as u32,
             max_heights,
-            delta_height,
+            sum_delta_height,
+            max_delta_height,
             cleared_lines
         }
     }
@@ -236,7 +245,8 @@ mod tests {
             (0, 0)
         ]).stack_stats();
         assert_eq!(stats.max_heights, [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-        assert_eq!(stats.delta_height, 1);
+        assert_eq!(stats.sum_delta_height, 1);
+        assert_eq!(stats.max_delta_height, 1);
     }
 
     #[test]
@@ -245,7 +255,8 @@ mod tests {
             (1, 0)
         ]).stack_stats();
         assert_eq!(stats.max_heights, [0, 1, 0, 0, 0, 0, 0, 0, 0, 0]);
-        assert_eq!(stats.delta_height, 2);
+        assert_eq!(stats.sum_delta_height, 2);
+        assert_eq!(stats.max_delta_height, 1);
     }
 
     #[test]
@@ -256,7 +267,8 @@ mod tests {
         ]).stack_stats();
 
         assert_eq!(stats.max_heights, [0, 2, 0, 0, 0, 0, 0, 0, 0, 0]);
-        assert_eq!(stats.delta_height, 4);
+        assert_eq!(stats.sum_delta_height, 4);
+        assert_eq!(stats.max_delta_height, 2);
     }
 
 
@@ -273,8 +285,9 @@ mod tests {
                 open_holes: 0,
                 closed_holes: 0,
                 max_heights: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                delta_height: 1,
+                sum_delta_height: 1,
                 cleared_lines: 1,
+                max_delta_height: 1
             }
         );
     }
@@ -289,7 +302,8 @@ mod tests {
         ]).stack_stats();
 
         assert_eq!(stats.max_heights, [3, 3, 4, 3, 4, 0, 4, 2, 4, 1]);
-        assert_eq!(stats.delta_height, 18);
+        assert_eq!(stats.sum_delta_height, 18);
+        assert_eq!(stats.max_delta_height, 4);
     }
 
     #[test]

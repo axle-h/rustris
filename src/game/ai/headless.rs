@@ -1,6 +1,5 @@
-use std::iter::Sum;
-use std::ops::{Add, Div};
 use std::time::Duration;
+use crate::animation::destroy::SWEEP_DURATION;
 use crate::config::Config;
 use crate::event::GameEvent;
 use crate::game::ai::agent::AiAgent;
@@ -12,79 +11,122 @@ use crate::game::random::{new_seed, RandomTetromino};
 pub struct HeadlessGame {
     agent: AiAgent,
     game: Game,
-    max_duration: Duration,
+    options: HeadlessGameOptions,
     duration: Duration,
-    game_over: bool
+    game_over: bool,
 }
 
 impl HeadlessGame {
-    pub fn new(config: Config, seed: u64, max_duration: Duration, coefficients: CostCoefficients) -> Self {
-        let rng = RandomTetromino::new(
-            config.game.random_mode,
-            config.game.min_garbage_per_hole,
-            seed
-        );
+    pub fn new(
+        rng: RandomTetromino,
+        agent: AiAgent,
+        options: HeadlessGameOptions,
+    ) -> Self {
         Self {
-            agent: AiAgent::new(BoardCost::new(coefficients)),
+            agent,
             game: Game::new(1, 0, rng),
-            max_duration,
             duration: Duration::ZERO,
-            game_over: false
+            game_over: false,
+            options
         }
     }
-
-    pub fn result(&self) -> GameResult {
-        GameResult::new(self.game.score, self.game.lines, self.game.level)
+    
+    pub fn play(&mut self) -> GameResult {
+        while self.update() {}
+        GameResult::new(self.game.score, self.game.lines, self.game.level, self.game_over)
     }
 
-    pub fn update(&mut self, delta: Duration) -> bool {
+    fn update(&mut self) -> bool {
         if self.game_over {
             return false
         }
-        self.duration += delta;
-        if self.duration > self.max_duration {
-            self.game_over = true;
+        self.duration += self.options.step;
+        if self.duration > self.options.max_duration {
             return false;
         }
 
         self.agent.act(&mut self.game);
-        self.game.empty_event_buffer();
+        let mut events = self.game.empty_event_buffer();
 
-        if let Some(GameEvent::GameOver { .. }) = self.game.update(delta) {
-            self.game_over = true;
+        if let Some(event) = self.game.update(self.options.step) {
+            events.push(event);
+        }
+
+        for event in events {
+            match event {
+                GameEvent::GameOver { .. } => {
+                    self.game_over = true;
+                    return false;
+                },
+                GameEvent::Destroy(_) => {
+                    // simulate line clear animation
+                    self.duration += self.options.line_clear_delay;
+                }
+                _ => ()
+            }
         }
 
         true
     }
 }
 
-pub struct HeadlessGameFixture {
-    config: Config,
-    seed: u64,
+#[derive(Debug, Clone, Copy)]
+pub struct HeadlessGameOptions {
     max_duration: Duration,
+    line_clear_delay: Duration,
     step: Duration
 }
 
-impl HeadlessGameFixture {
-    pub fn new(config: Config, seed: u64, max_duration: Duration, step: Duration) -> Self {
-        Self { config, seed, max_duration, step }
-    }
-
-    pub fn play(&self, coefficients: CostCoefficients) -> GameResult {
-        let mut game = HeadlessGame::new(self.config, self.seed, self.max_duration, coefficients);
-        while game.update(self.step) {}
-        game.result()
+impl HeadlessGameOptions {
+    pub fn new(max_duration: Duration, line_clear_delay: Duration, step: Duration) -> Self {
+        Self {
+            max_duration,
+            line_clear_delay,
+            step
+        }
     }
 }
 
-impl Default for HeadlessGameFixture {
+impl Default for HeadlessGameOptions {
     fn default() -> Self {
-        Self::new(
-            Config::default(),
-            new_seed(),
-            Duration::from_millis(30000),
-            Duration::from_millis(16)
-        )
+        Self {
+            step: Duration::from_millis(16), // 60hz
+            max_duration: Duration::from_millis(600_000),
+            line_clear_delay: SWEEP_DURATION
+        }   
+    }
+}
+
+pub struct HeadlessGameFixture {
+    config: Config,
+    seeds: Vec<u64>,
+    game_options: HeadlessGameOptions,
+    look_ahead: usize
+}
+
+impl HeadlessGameFixture {
+    pub fn new(config: Config, seeds: Vec<u64>, game_options: HeadlessGameOptions, look_ahead: usize) -> Self {
+        Self { config, seeds, game_options, look_ahead }
+    }
+    
+    pub fn play(&self, coefficients: CostCoefficients) -> GameResult {
+        let mut sum_result = GameResult::default();
+        for seed in self.seeds.iter() {
+            let rng = RandomTetromino::new(
+                self.config.game.random_mode,
+                self.config.game.min_garbage_per_hole,
+                *seed
+            );
+            let agent = AiAgent::new(BoardCost::new(coefficients), self.look_ahead);
+            let result = HeadlessGame::new(rng, agent, self.game_options).play();
+            sum_result += result;
+        }
+        
+        if self.seeds.len() > 1 {
+            sum_result / self.seeds.len()
+        } else {
+            sum_result
+        }
     }
 }
 
@@ -92,16 +134,29 @@ impl Default for HeadlessGameFixture {
 mod tests {
     use super::*;
 
+    fn test_fixture() -> HeadlessGameFixture {
+        HeadlessGameFixture::new(
+            Config::default(),
+            vec![100, 101],
+            HeadlessGameOptions::new(
+                Duration::from_millis(10_000),
+                Duration::from_millis(100),
+                Duration::from_millis(16),
+            ),
+            1
+        )
+    }
+    
     #[test]
     fn runs_headless_game() {
-        let fixture = HeadlessGameFixture::default();
+        let fixture = test_fixture();
         let result = fixture.play(CostCoefficients::SENSIBLE_DEFAULTS);
         assert!(result.score() > 0);
     }
 
     #[test]
     fn same_score_for_the_same_inputs() {
-        let fixture = HeadlessGameFixture::default();
+        let fixture = test_fixture();
         let result1 = fixture.play(CostCoefficients::SENSIBLE_DEFAULTS);
         let result2 = fixture.play(CostCoefficients::SENSIBLE_DEFAULTS);
         assert_eq!(result1, result2);

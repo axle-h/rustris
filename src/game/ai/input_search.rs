@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use crate::game::ai::apply_inputs::ApplyInputs;
 use crate::game::ai::input_sequence::InputSequence;
 use crate::game::board::Board;
-use crate::game::tetromino::{Minos, Tetromino, TetrominoShape};
+use crate::game::tetromino::{Minos, TetrominoShape};
 
 pub trait InputSearch {
     fn search_all_inputs(&self, shape: TetrominoShape) -> Vec<InputSequenceResult>;

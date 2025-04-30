@@ -22,7 +22,7 @@ impl MutationRateLimits {
 
 impl Default for MutationRateLimits {
     fn default() -> Self {
-        Self::new(0.01 ..= 0.3, 0.01)
+        Self::new(0.1 ..= 1.0, 0.1)
     }
 }
 
@@ -82,8 +82,8 @@ impl MutationRate {
         }
     }
     
-    pub fn mutate(&mut self, rng: &mut impl Rng, stats: CostCoefficients) -> CostCoefficients {
-        stats.mutate(self.current, rng)
+    pub fn mutate(&mut self, factor: f64, stats: CostCoefficients, rng: &mut impl Rng) -> CostCoefficients {
+        stats.mutate(self.current * factor, rng)
     }
 }
 

@@ -10,4 +10,5 @@ mod game_result;
 mod stats;
 mod mutation;
 mod generation_stats;
+mod floats;
 

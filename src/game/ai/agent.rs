@@ -72,7 +72,7 @@ impl AiAgent {
     
     fn best_move(&self, game: &Game, shape: TetrominoShape, peek: &[TetrominoShape]) -> Option<(InputSequence, f64)> {
         if peek.is_empty() {
-            return self.evaluate_single_move(&game.board, shape)
+            return self.best_single_move(&game.board, shape)
                 .map(|(result, cost)| (result.inputs(), cost));
         }
 
@@ -91,7 +91,7 @@ impl AiAgent {
                 // Try each piece in the peek sequence
                 for &next_shape in peek.iter().take(self.look_ahead) {
                     // TODO could use the held tetromino here
-                    if let Some((next_result, next_move_cost)) = self.evaluate_single_move(&current_board, next_shape) {
+                    if let Some((next_result, next_move_cost)) = self.best_single_move(&current_board, next_shape) {
                         sum_cost += next_move_cost;
                         current_board = next_result.board();
                     } else {
@@ -111,7 +111,7 @@ impl AiAgent {
     }
 
 
-    fn evaluate_single_move(&self, board: &Board, shape: TetrominoShape) -> Option<(InputSequenceResult, f64)> {
+    fn best_single_move(&self, board: &Board, shape: TetrominoShape) -> Option<(InputSequenceResult, f64)> {
         let moves: Vec<_> = board.search_all_inputs(shape)
             .into_iter()
             .map(|r| (r, self.cost.cost(r.board())))

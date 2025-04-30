@@ -1,10 +1,13 @@
+use std::cmp::Ordering;
+use std::fmt::Display;
 use std::ops::RangeInclusive;
 use rand::distr::{Distribution, StandardUniform};
 use rand::Rng;
 use crate::game::ai::board_features::BoardFeatures;
+use crate::game::ai::floats::{is_near_f64, precision_f64};
 use crate::game::board::Board;
 
-#[derive(Clone, Copy, Debug, PartialEq, Default)]
+#[derive(Clone, Copy, Debug, PartialOrd, Default)]
 pub struct CostCoefficients {
     open_holes: f64,
     closed_holes: f64,
@@ -16,20 +19,57 @@ pub struct CostCoefficients {
     tetris_clear: f64,
 }
 
+impl PartialEq for CostCoefficients {
+    fn eq(&self, other: &Self) -> bool {
+        // fuzzy equality is fine for these
+        is_near_f64(self.open_holes, other.open_holes) &&
+            is_near_f64(self.closed_holes, other.closed_holes) &&
+            is_near_f64(self.max_stack_height, other.max_stack_height) &&
+            is_near_f64(self.sum_delta_stack_height, other.sum_delta_stack_height) &&
+            is_near_f64(self.max_delta_stack_height, other.max_delta_stack_height) &&
+            is_near_f64(self.rhs_column_height, other.rhs_column_height) &&
+            is_near_f64(self.line_clear, other.line_clear) &&
+            is_near_f64(self.tetris_clear, other.tetris_clear)
+    }
+}
+
+impl Eq for CostCoefficients {}
+
+impl Ord for CostCoefficients {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
 impl CostCoefficients {
+    const COEFFICIENT_PRECISION: u32 = 8;
+
+    fn precision_f64(value: f64) -> f64 {
+        precision_f64(value, Self::COEFFICIENT_PRECISION)
+    }
+
     pub const SENSIBLE_DEFAULTS: CostCoefficients = CostCoefficients {
-        open_holes: -1672.422676147427,
-        closed_holes: -1567.3356151387015,
-        max_stack_height: -50.28248878851279,
-        sum_delta_stack_height: -246.88223251569855,
-        max_delta_stack_height: -16.35507057093828,
-        rhs_column_height: 493.0707203792224,
-        line_clear: 185.2886928281004,
-        tetris_clear: 409.9975147751869
+        open_holes: -1672.4227,
+        closed_holes: -1567.3356,
+        max_stack_height: -50.282489,
+        sum_delta_stack_height: -246.88223,
+        max_delta_stack_height: -16.355071,
+        rhs_column_height: 493.07072,
+        line_clear: 185.28869,
+        tetris_clear: 409.99751
     };
 
     pub fn new(open_holes: f64, closed_holes: f64, max_stack_height: f64, sum_delta_stack_height: f64, max_delta_stack_height: f64, rhs_column_height: f64, line_clear: f64, tetris_clear: f64) -> Self {
-        Self { open_holes, closed_holes, max_stack_height, sum_delta_stack_height, max_delta_stack_height, rhs_column_height, line_clear, tetris_clear }
+        Self {
+            open_holes: Self::precision_f64(open_holes),
+            closed_holes: Self::precision_f64(closed_holes),
+            max_stack_height: Self::precision_f64(max_stack_height),
+            sum_delta_stack_height: Self::precision_f64(sum_delta_stack_height),
+            max_delta_stack_height: Self::precision_f64(max_delta_stack_height),
+            rhs_column_height: Self::precision_f64(rhs_column_height),
+            line_clear: Self::precision_f64(line_clear),
+            tetris_clear: Self::precision_f64(tetris_clear),
+        }
     }
 
     pub fn open_holes(&self) -> f64 {
@@ -65,29 +105,36 @@ impl CostCoefficients {
     }
 
     pub fn merge_with(&self, other: &Self) -> Self {
-        CostCoefficients {
-            open_holes: avg(self.open_holes, other.open_holes),
-            closed_holes: avg(self.closed_holes, other.closed_holes),
-            max_stack_height: avg(self.max_stack_height, other.max_stack_height),
-            sum_delta_stack_height: avg(self.sum_delta_stack_height, other.sum_delta_stack_height),
-            max_delta_stack_height: avg(self.max_delta_stack_height, other.max_delta_stack_height),
-            rhs_column_height: avg(self.rhs_column_height, other.rhs_column_height),
-            line_clear: avg(self.line_clear, other.line_clear),
-            tetris_clear: avg(self.tetris_clear, other.tetris_clear),
-        }
+        CostCoefficients::new(
+            avg(self.open_holes, other.open_holes),
+            avg(self.closed_holes, other.closed_holes),
+            avg(self.max_stack_height, other.max_stack_height),
+            avg(self.sum_delta_stack_height, other.sum_delta_stack_height),
+            avg(self.max_delta_stack_height, other.max_delta_stack_height),
+            avg(self.rhs_column_height, other.rhs_column_height),
+            avg(self.line_clear, other.line_clear),
+            avg(self.tetris_clear, other.tetris_clear),
+        )
     }
 
     pub fn mutate(&self, magnitude: f64, rng: &mut impl Rng) -> CostCoefficients {
-        CostCoefficients {
-            open_holes: rng.nudge(magnitude, self.open_holes),
-            closed_holes: rng.nudge(magnitude, self.closed_holes),
-            max_stack_height: rng.nudge(magnitude, self.max_stack_height),
-            sum_delta_stack_height: rng.nudge(magnitude, self.sum_delta_stack_height),
-            max_delta_stack_height: rng.nudge(magnitude, self.max_delta_stack_height),
-            rhs_column_height: rng.nudge(magnitude, self.rhs_column_height),
-            line_clear: rng.nudge(magnitude, self.line_clear),
-            tetris_clear: rng.nudge(magnitude, self.tetris_clear),
-        }
+        CostCoefficients::new(
+            rng.nudge(magnitude, self.open_holes),
+            rng.nudge(magnitude, self.closed_holes),
+            rng.nudge(magnitude, self.max_stack_height),
+            rng.nudge(magnitude, self.sum_delta_stack_height),
+            rng.nudge(magnitude, self.max_delta_stack_height),
+            rng.nudge(magnitude, self.rhs_column_height),
+            rng.nudge(magnitude, self.line_clear),
+            rng.nudge(magnitude, self.tetris_clear),
+        )
+    }
+}
+
+impl Display for CostCoefficients {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "open_holes: {}, closed_holes: {}, max_stack_height: {}, sum_delta_stack_height: {}, max_delta_stack_height: {}, rhs_column_height: {}, line_clear: {}, tetris_clear: {}",
+            self.open_holes, self.closed_holes, self.max_stack_height, self.sum_delta_stack_height, self.max_delta_stack_height, self.rhs_column_height, self.line_clear, self.tetris_clear)
     }
 }
 
@@ -126,29 +173,24 @@ impl<R: Rng + ?Sized> RngCoefficients for R {
     }
 
     fn nudge(&mut self, magnitude: f64, value: f64) -> f64 {
-        let from = value - (value * magnitude);
-        let to = value + (value * magnitude);
-        let range = from ..= to;
-        if range.is_empty() {
-            self.random_range(-0.01 ..= 0.01)
-        } else {
-            value + self.random_range(from ..= to)
-        }
+        let delta = (value * magnitude).max(0.01).min(*COEFFICIENTS_RANGE.end());
+        let range = value - delta ..= value + delta;
+        value + self.random_range(range)
     }
 }
 
 impl Distribution<CostCoefficients> for StandardUniform {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> CostCoefficients {
-        CostCoefficients {
-            open_holes: rng.coefficient(),
-            closed_holes: rng.coefficient(),
-            max_stack_height: rng.coefficient(),
-            sum_delta_stack_height: rng.coefficient(),
-            max_delta_stack_height: rng.coefficient(),
-            rhs_column_height: rng.coefficient(),
-            line_clear: rng.coefficient(),
-            tetris_clear: rng.coefficient(),
-        }
+        CostCoefficients::new(
+            rng.coefficient(),
+            rng.coefficient(),
+            rng.coefficient(),
+            rng.coefficient(),
+            rng.coefficient(),
+            rng.coefficient(),
+            rng.coefficient(),
+            rng.coefficient(),
+        )
     }
 }
 

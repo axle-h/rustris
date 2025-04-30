@@ -1,6 +1,8 @@
 use std::array;
+use std::collections::BTreeMap;
 use std::ops::{Add, Div};
 use rand::{Rng, SeedableRng};
+use rand::prelude::SliceRandom;
 use rand_chacha::ChaChaRng;
 use rayon::prelude::*;
 use crate::config::Config;
@@ -21,18 +23,20 @@ pub struct GeneticAlgorithm {
     elite_count: usize,
     mutate_count: usize,
     breed_count: usize,
+    cached_scores: BTreeMap<CostCoefficients, GameResult>
 }
 
 const POPULATION_SIZE: usize = 100;
 
 impl GeneticAlgorithm {
+    // TODO increase game length as games start to get longer
     pub fn new(fixture: HeadlessGameFixture, elite_ratio: f64, mutate_ratio: f64, breed_ratio: f64, mutation: MutationRate) -> Result<Self, String> {
         let size_f64 = POPULATION_SIZE as f64;
         let elite_count = (size_f64 * elite_ratio).ceil().clamp(0.0, size_f64) as usize;
         let mutate_count = (size_f64 * mutate_ratio).ceil().clamp(0.0, size_f64) as usize;
         let breed_count = (size_f64 * breed_ratio).ceil().clamp(0.0, size_f64) as usize;
 
-        let total_count = elite_count + mutate_count.max(breed_count);
+        let total_count = elite_count.max(mutate_count + breed_count);
 
         if total_count > POPULATION_SIZE {
             return Err(format!(
@@ -51,6 +55,7 @@ impl GeneticAlgorithm {
             elite_count,
             mutate_count,
             breed_count,
+            cached_scores: BTreeMap::new()
         })
     }
 
@@ -59,9 +64,20 @@ impl GeneticAlgorithm {
         let mut labelled_population: Vec<_> = self.population
             .into_par_iter()
             .map(|coefficients| {
-                (coefficients, self.fixture.play(coefficients))
+                let result = if let Some(cached) = self.cached_scores.get(&coefficients) {
+                    *cached
+                } else {
+                    self.fixture.play(coefficients)
+                };
+                (coefficients, result)
             })
             .collect();
+
+        // update cache outside of the parallel iterator
+        for (coefficients, result) in labelled_population.iter().copied() {
+            self.cached_scores.insert(coefficients, result);
+        }
+
         labelled_population.sort_by(|(_, s1), (_, s2)| s2.cmp(s1));
 
         let results: Vec<_> = labelled_population.iter().map(|(_, s1)| *s1).collect();
@@ -105,23 +121,22 @@ impl GeneticAlgorithm {
                 breeding_population.push(*coefficient);
                 added = true;
             } else if mutated_population.len() < self.mutate_count {
-                let mutated = self.mutation.mutate(&mut self.rng, *coefficient);
+                let mutated = self.mutation.mutate(1.0, *coefficient, &mut self.rng);
                 mutated_population.push(mutated);
                 added = true;
-            } 
+            }
 
             if !added {
                 break;
             }
         }
 
-        // TODO should I shuffle the breeding population?
-        // breeding_population.shuffle(&mut self.rng);
+        breeding_population.shuffle(&mut self.rng);
         let mut offspring = breeding_population
             .chunks(2)
             .filter_map(|chunk| {
                 if let [x, y] = chunk {
-                    Some(self.mutation.mutate(&mut self.rng, x.merge_with(y)))
+                    Some(self.mutation.mutate(0.2, x.merge_with(y), &mut self.rng))
                 } else { None }
             })
             .collect();
@@ -188,12 +203,12 @@ impl PopulationCounts {
 pub fn ga_main() -> Result<(), String> {
     let fixture = HeadlessGameFixture::new(
         Config::default(),
-        vec![new_seed()],
+        vec![new_seed(), new_seed()],
         HeadlessGameOptions::default(),
-        1
+        2
     );
     let mutation = MutationRate::of_max(MutationRateLimits::default(), 5);
-    let mut ga = GeneticAlgorithm::new(fixture, 0.05, 0.8, 0.5, mutation)?;
+    let mut ga = GeneticAlgorithm::new(fixture, 0.05, 0.5, 0.20, mutation)?;
 
     println!("starting");
     for _ in 0..10_000 {

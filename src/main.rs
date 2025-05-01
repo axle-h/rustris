@@ -64,7 +64,7 @@ use std::str::FromStr;
 use crate::menu::sound::MenuSound;
 use theme_context::{PlayerTextures, TextureMode, ThemeContext};
 use crate::game::ai::agent::AiAgent;
-use crate::game::ai::board_cost::{BoardCost, CostCoefficients};
+use crate::game::ai::board_cost::{BoardCost, AiCoefficients};
 use crate::game::ai::genetic::ga_main;
 use crate::game::random::PEEK_SIZE;
 use crate::icon::app_icon;
@@ -480,7 +480,7 @@ impl TetrisSdl {
         let mut max_level = 0;
         let mut frame_rate = FrameRate::new();
 
-        let mut ai = AiAgent::new(BoardCost::new(CostCoefficients::SENSIBLE_DEFAULTS), PEEK_SIZE);
+        let mut ai = AiAgent::new(BoardCost::new(AiCoefficients::default()), PEEK_SIZE);
         
         loop {
             let delta = frame_rate.update()?;

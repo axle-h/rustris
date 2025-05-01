@@ -1,18 +1,20 @@
 use std::ops::{Add, AddAssign, Div, Sub};
 use std::cmp::Ordering;
 use std::iter::Sum;
+use std::time::Duration;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct GameResult {
     score: u32,
     lines: u32,
     level: u32,
-    game_over: bool
+    game_over: bool,
+    time: Duration
 }
 
 impl GameResult {
-    pub fn new(score: u32, lines: u32, level: u32, game_over: bool) -> Self {
-        Self { score, lines, level, game_over }
+    pub fn new(score: u32, lines: u32, level: u32, game_over: bool, time: Duration) -> Self {
+        Self { score, lines, level, game_over, time }
     }
 
     pub fn score(&self) -> u32 {
@@ -30,11 +32,15 @@ impl GameResult {
     pub fn game_over(&self) -> bool {
         self.game_over
     }
+
+    pub fn time(&self) -> Duration {
+        self.time
+    }
 }
 
 impl Default for GameResult {
     fn default() -> Self {
-        Self::new(0, 0, 0, false)
+        Self::new(0, 0, 0, false, Duration::ZERO)
     }
 }
 
@@ -47,6 +53,9 @@ impl Add for GameResult {
             lines: self.lines + rhs.lines,
             level: self.level + rhs.level,
             game_over: self.game_over || rhs.game_over,
+            time: self.time + rhs.time,
+
+            // TODO track number of tetris clears
         }
     }
 }
@@ -57,6 +66,7 @@ impl AddAssign for GameResult {
         self.lines += rhs.lines;
         self.level += rhs.level;
         self.game_over |= rhs.game_over;
+        self.time += rhs.time;
     }
 }
 
@@ -78,6 +88,7 @@ impl Div<usize> for GameResult {
             lines: (self.lines as f64 / rhs_f64).round() as u32,
             level: (self.level as f64 / rhs_f64).round() as u32,
             game_over: self.game_over,
+            time: self.time.div_f64(rhs_f64),
         }
     }
 }
@@ -101,8 +112,8 @@ mod tests {
 
     #[test]
     fn game_result_ordering() {
-        let result1 = GameResult::new(10, 10, 10, false);
-        let result2 = GameResult::new(10, 10, 10, true);
+        let result1 = GameResult::new(10, 10, 10, false, Duration::ZERO);
+        let result2 = GameResult::new(10, 10, 10, true, Duration::ZERO);
         assert!(result1 > result2);
     }
 }

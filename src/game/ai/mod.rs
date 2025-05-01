@@ -4,11 +4,11 @@ mod input_sequence;
 pub mod board_cost;
 mod board_features;
 pub mod agent;
-mod headless;
+mod headless_game;
 pub mod genetic;
 mod game_result;
 mod stats;
 mod mutation;
 mod generation_stats;
-mod floats;
+mod coefficient;
 

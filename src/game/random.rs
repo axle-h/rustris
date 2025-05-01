@@ -6,6 +6,7 @@ use rand::{Rng};
 use rand_chacha::{ChaChaRng};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+use rand::distr::StandardUniform;
 
 pub const PEEK_SIZE: usize = 7;
 const ALL_SHAPES: [TetrominoShape; 7] = [
@@ -22,8 +23,41 @@ fn rand_shape<R: Rng>(rng: &mut R) -> TetrominoShape {
     ALL_SHAPES[rng.random_range(0..ALL_SHAPES.len())]
 }
 
-pub fn new_seed() -> u64 {
-    rand::rng().random()
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Seed(<ChaChaRng as SeedableRng>::Seed);
+
+impl Default for Seed {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
+
+impl Distribution<Seed> for StandardUniform {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Seed {
+        Seed(rng.random())   
+    }
+}
+
+impl From<u128> for Seed {
+    fn from(value: u128) -> Self {
+        let mut seed = Seed::default();
+        seed.0[..16].copy_from_slice(&value.to_le_bytes());
+        seed
+    }   
+}
+
+impl From<i32> for Seed {
+    fn from(value: i32) -> Self {
+        let mut seed = Seed::default();
+        seed.0[..4].copy_from_slice(&value.to_le_bytes());
+        seed
+    }
+}
+
+impl Into<ChaChaRng> for Seed {
+    fn into(self) -> ChaChaRng {
+        ChaChaRng::from_seed(self.0)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,7 +70,7 @@ pub enum RandomMode {
 
 impl RandomMode {
     pub fn build(self, count: usize, min_garbage_per_hole: u32) -> Vec<RandomTetromino> {
-        let seed = new_seed();
+        let seed: Seed = rand::random();
         (0..count)
             .map(|_| RandomTetromino::new(self, min_garbage_per_hole, seed))
             .collect()
@@ -54,8 +88,8 @@ pub struct RandomTetromino {
 }
 
 impl RandomTetromino {
-    pub fn new(random_mode: RandomMode, min_garbage_per_hole: u32, seed: u64) -> Self {
-        let mut rng = ChaChaRng::seed_from_u64(seed);
+    pub fn new(random_mode: RandomMode, min_garbage_per_hole: u32, seed: Seed) -> Self {
+        let mut rng: ChaChaRng = seed.into();
         let current_garbage_hole = rng.random_range(0..BOARD_WIDTH);
         match random_mode {
             RandomMode::True => {

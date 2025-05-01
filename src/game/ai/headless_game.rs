@@ -3,10 +3,10 @@ use crate::animation::destroy::SWEEP_DURATION;
 use crate::config::Config;
 use crate::event::GameEvent;
 use crate::game::ai::agent::AiAgent;
-use crate::game::ai::board_cost::{BoardCost, CostCoefficients};
+use crate::game::ai::board_cost::{BoardCost, AiCoefficients};
 use crate::game::ai::game_result::GameResult;
 use crate::game::Game;
-use crate::game::random::{new_seed, RandomTetromino};
+use crate::game::random::{RandomTetromino, Seed};
 
 pub struct HeadlessGame {
     agent: AiAgent,
@@ -33,13 +33,15 @@ impl HeadlessGame {
     
     pub fn play(&mut self) -> GameResult {
         while self.update() {}
-        GameResult::new(self.game.score, self.game.lines, self.game.level, self.game_over)
+        GameResult::new(self.game.score, self.game.lines, self.game.level, self.game_over, self.duration)
     }
 
     fn update(&mut self) -> bool {
         if self.game_over {
             return false
         }
+        
+        // TODO have dynamic end goals e.g. score, lines, levels, tetris count
         self.duration += self.options.step;
         if self.duration > self.options.max_duration {
             return false;
@@ -99,17 +101,17 @@ impl Default for HeadlessGameOptions {
 
 pub struct HeadlessGameFixture {
     config: Config,
-    seeds: Vec<u64>,
+    seeds: Vec<Seed>,
     game_options: HeadlessGameOptions,
     look_ahead: usize
 }
 
 impl HeadlessGameFixture {
-    pub fn new(config: Config, seeds: Vec<u64>, game_options: HeadlessGameOptions, look_ahead: usize) -> Self {
+    pub fn new(config: Config, seeds: Vec<Seed>, game_options: HeadlessGameOptions, look_ahead: usize) -> Self {
         Self { config, seeds, game_options, look_ahead }
     }
     
-    pub fn play(&self, coefficients: CostCoefficients) -> GameResult {
+    pub fn play(&self, coefficients: AiCoefficients) -> GameResult {
         let mut sum_result = GameResult::default();
         for seed in self.seeds.iter() {
             let rng = RandomTetromino::new(
@@ -137,28 +139,28 @@ mod tests {
     fn test_fixture() -> HeadlessGameFixture {
         HeadlessGameFixture::new(
             Config::default(),
-            vec![100, 101],
+            vec![100.into(), 101.into()],
             HeadlessGameOptions::new(
-                Duration::from_millis(10_000),
+                Duration::from_millis(5_000),
                 Duration::from_millis(100),
                 Duration::from_millis(16),
             ),
-            1
+            0
         )
     }
     
     #[test]
     fn runs_headless_game() {
         let fixture = test_fixture();
-        let result = fixture.play(CostCoefficients::SENSIBLE_DEFAULTS);
+        let result = fixture.play(AiCoefficients::default());
         assert!(result.score() > 0);
     }
 
     #[test]
     fn same_score_for_the_same_inputs() {
         let fixture = test_fixture();
-        let result1 = fixture.play(CostCoefficients::SENSIBLE_DEFAULTS);
-        let result2 = fixture.play(CostCoefficients::SENSIBLE_DEFAULTS);
+        let result1 = fixture.play(AiCoefficients::default());
+        let result2 = fixture.play(AiCoefficients::default());
         assert_eq!(result1, result2);
     }
 }

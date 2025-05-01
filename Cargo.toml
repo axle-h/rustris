@@ -14,7 +14,7 @@ dependencies = ["sdl2", "sdl2-image", "sdl2-gfx", "sdl2-mixer", "sdl2-ttf"]
 x86_64-pc-windows-msvc = { triplet = "x64-windows-static-md" }
 
 [features]
-default = ["vcpkg"]
+default = ["pkgconfig"]
 vcpkg = ["sdl2/static-link", "sdl2/use-vcpkg"]
 pkgconfig = ["sdl2/use-pkgconfig"]
 retro_handheld = []
@@ -34,7 +34,7 @@ num-format = "0.4.4"
 strum = { version = "0.27.1", features = ["derive"] }
 strum_macros = "0.27.1"
 rayon = "1.10.0"
-assert_float_eq = "1.1.4"
+itertools = "0.14.0"
 
 [profile.release]
 strip = "symbols"

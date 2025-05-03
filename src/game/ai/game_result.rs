@@ -1,5 +1,6 @@
 use std::ops::{Add, AddAssign, Div, Sub};
 use std::cmp::Ordering;
+use std::fmt::{Display, Formatter};
 use std::iter::Sum;
 use std::time::Duration;
 
@@ -10,6 +11,13 @@ pub struct GameResult {
     level: u32,
     game_over: bool,
     time: Duration
+}
+
+impl Display for GameResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "score: {}, lines: {}, level: {}, time: {:?}",
+               self.score, self.lines, self.level, self.time)
+    }
 }
 
 impl GameResult {

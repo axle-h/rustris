@@ -86,7 +86,7 @@ impl AiAgent {
             .into_iter()
             .map(|initial_move| {
                 let mut current_board = initial_move.board();
-                let mut sum_cost = self.cost.cost(current_board);
+                let mut sum_cost = self.cost.cost(current_board, initial_move.minos());
 
                 // Try each piece in the peek sequence
                 for &next_shape in peek.iter().take(self.look_ahead) {
@@ -114,7 +114,7 @@ impl AiAgent {
     fn best_single_move(&self, board: &Board, shape: TetrominoShape) -> Option<(InputSequenceResult, f64)> {
         let moves: Vec<_> = board.search_all_inputs(shape)
             .into_iter()
-            .map(|r| (r, self.cost.cost(r.board())))
+            .map(|r| (r, self.cost.cost(r.board(), r.minos())))
             .collect();
 
         if moves.is_empty() {

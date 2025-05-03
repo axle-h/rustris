@@ -12,6 +12,7 @@ pub trait InputSearch {
 pub struct InputSequenceResult {
     inputs: InputSequence,
     board: Board,
+    minos: Minos,
 }
 
 impl InputSequenceResult {
@@ -21,6 +22,10 @@ impl InputSequenceResult {
 
     pub fn board(&self) -> Board {
         self.board
+    }
+
+    pub fn minos(&self) -> Minos {
+        self.minos
     }
 }
 
@@ -48,7 +53,7 @@ impl InputSearch for Board {
             current_board.hard_drop();
             if let Some(mut minos) = current_board.lock() {
                 minos.sort();
-                results.insert(minos, InputSequenceResult { board: current_board, inputs });
+                results.insert(minos, InputSequenceResult { board: current_board, inputs, minos });
             }
 
             for input in [inputs.into_left(), inputs.into_right(), inputs.into_rotation()] {

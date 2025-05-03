@@ -100,6 +100,12 @@ impl AddAssign for Point {
     }
 }
 
+impl Default for Point {
+    fn default() -> Self {
+        Self::new(0, 0)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Rotation {
     North,

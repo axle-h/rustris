@@ -166,6 +166,11 @@ pub type Minos = [Point; 4];
 pub type MinoPerimeter = [Perimeter; 4];
 pub type MinoCorners = [Corner; 4];
 
+pub fn minos_of(p0: (i32, i32), p1: (i32, i32), p2: (i32, i32), p3: (i32, i32)) -> Minos {
+    [p0, p1, p2, p3].map(|(x, y)| Point::new(x, y))
+}
+
+
 const fn perimeter(minos: [u8; 4]) -> MinoPerimeter {
     // error[E0658]: `for` is not allowed in a `const fn`
     let mut result = [Perimeter::Top; 4];

@@ -3,13 +3,20 @@ use std::fmt::{Debug, Display, Formatter};
 use rand::distr::{Distribution, StandardUniform};
 use rand::Rng;
 
-const COEFFICIENT_STEP: f64 = 0.0001;
-const RANDOM_COEFFICIENT_MIN: Coefficient = Coefficient::new((-100.0 / COEFFICIENT_STEP) as i64);
-const RANDOM_COEFFICIENT_MAX: Coefficient = Coefficient::new((100.0 / COEFFICIENT_STEP) as i64);
-const RANDOM_RAW_COEFFICIENT_RANGE: RangeInclusive<i64> = RANDOM_COEFFICIENT_MIN.0 ..= RANDOM_COEFFICIENT_MAX.0;
+pub const COEFFICIENT_STEP: f64 = 0.01;
+
+pub const RANDOM_RAW_COEFFICIENT_RANGE: RangeInclusive<i64> = raw_coefficient_range(100.0);
+
+pub const RANDOM_RAW_COEFFICIENT_DELTA_RANGE: RangeInclusive<i64> = raw_coefficient_range(10.0);
+
+const fn raw_coefficient_range(delta: f64) -> RangeInclusive<i64> {
+    let from = Coefficient::from_f64_unchecked(-delta).raw();
+    let to = Coefficient::from_f64_unchecked(delta).raw();
+    from ..= to
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
-pub struct Coefficient(pub i64);
+pub struct Coefficient(i64);
 
 impl Coefficient {
     pub const ZERO: Self = Self(0);
@@ -18,16 +25,24 @@ impl Coefficient {
     pub const fn new(magnitude: i64) -> Self {
         Self(magnitude)
     }
+    
+    pub const fn from_f64_unchecked(value: f64) -> Self {
+        Self((value / COEFFICIENT_STEP) as i64)
+    }
 
     pub fn from_f64(value: f64) -> Self {
         Self((value / COEFFICIENT_STEP).round() as i64)
+    }
+    
+    pub const fn raw(&self) -> i64 {
+        self.0
     }
 }
 
 impl Display for Coefficient {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let value: f64 = (*self).into();
-        write!(f, "{:.4}", value)
+        write!(f, "{:.2}", value)
     }
 }
 
@@ -69,13 +84,13 @@ impl Mul<Coefficient> for f64 {
 impl Add<Coefficient> for Coefficient {
     type Output = Coefficient;
     fn add(self, rhs: Coefficient) -> Self::Output {
-        Self(self.0 + rhs.0)
+        Self(self.raw() + rhs.raw())
     }
 }
 
 impl Into<f64> for Coefficient {
     fn into(self) -> f64 {
-        self.0 as f64 * COEFFICIENT_STEP
+        self.raw() as f64 * COEFFICIENT_STEP
     }
 }
 

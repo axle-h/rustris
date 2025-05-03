@@ -11,6 +11,7 @@ use crate::game::random::{RandomTetromino, Seed};
 pub struct HeadlessGame {
     agent: AiAgent,
     game: Game,
+    end_game: EndGame,
     options: HeadlessGameOptions,
     duration: Duration,
     game_over: bool,
@@ -21,30 +22,32 @@ impl HeadlessGame {
         rng: RandomTetromino,
         agent: AiAgent,
         options: HeadlessGameOptions,
+        end_game: EndGame,
     ) -> Self {
         Self {
             agent,
             game: Game::new(1, 0, rng),
             duration: Duration::ZERO,
             game_over: false,
-            options
+            options,
+            end_game
         }
     }
     
     pub fn play(&mut self) -> GameResult {
-        while self.update() {}
-        GameResult::new(self.game.score, self.game.lines, self.game.level, self.game_over, self.duration)
+        loop {
+            if let Some(result) = self.update() {
+                return result;
+            }
+        }
     }
 
-    fn update(&mut self) -> bool {
-        if self.game_over {
-            return false
-        }
-        
-        // TODO have dynamic end goals e.g. score, lines, levels, tetris count
+    fn update(&mut self) -> Option<GameResult> {
         self.duration += self.options.step;
-        if self.duration > self.options.max_duration {
-            return false;
+        
+        let result = GameResult::new(self.game.score, self.game.lines, self.game.level, self.game_over, self.duration);
+        if self.game_over || self.end_game.is_end_game(result, self.duration) {
+            return Some(result);
         }
 
         self.agent.act(&mut self.game);
@@ -58,7 +61,7 @@ impl HeadlessGame {
             match event {
                 GameEvent::GameOver { .. } => {
                     self.game_over = true;
-                    return false;
+                    return Some(result);
                 },
                 GameEvent::Destroy(_) => {
                     // simulate line clear animation
@@ -68,23 +71,23 @@ impl HeadlessGame {
             }
         }
 
-        true
+        None
     }
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct HeadlessGameOptions {
-    max_duration: Duration,
     line_clear_delay: Duration,
-    step: Duration
+    step: Duration,
+    look_ahead: usize
 }
 
 impl HeadlessGameOptions {
-    pub fn new(max_duration: Duration, line_clear_delay: Duration, step: Duration) -> Self {
+    pub fn new(line_clear_delay: Duration, step: Duration, look_ahead: usize) -> Self {
         Self {
-            max_duration,
             line_clear_delay,
-            step
+            step,
+            look_ahead
         }
     }
 }
@@ -93,8 +96,8 @@ impl Default for HeadlessGameOptions {
     fn default() -> Self {
         Self {
             step: Duration::from_millis(16), // 60hz
-            max_duration: Duration::from_millis(600_000),
-            line_clear_delay: SWEEP_DURATION
+            line_clear_delay: SWEEP_DURATION,
+            look_ahead: 0 // TODO it's too slow
         }   
     }
 }
@@ -103,12 +106,12 @@ pub struct HeadlessGameFixture {
     config: Config,
     seeds: Vec<Seed>,
     game_options: HeadlessGameOptions,
-    look_ahead: usize
+    end_game: EndGame,
 }
 
 impl HeadlessGameFixture {
-    pub fn new(config: Config, seeds: Vec<Seed>, game_options: HeadlessGameOptions, look_ahead: usize) -> Self {
-        Self { config, seeds, game_options, look_ahead }
+    pub fn new(config: Config, seeds: Vec<Seed>, game_options: HeadlessGameOptions, end_game: EndGame) -> Self {
+        Self { config, seeds, game_options, end_game }
     }
     
     pub fn play(&self, coefficients: AiCoefficients) -> GameResult {
@@ -119,8 +122,8 @@ impl HeadlessGameFixture {
                 self.config.game.min_garbage_per_hole,
                 *seed
             );
-            let agent = AiAgent::new(BoardCost::new(coefficients), self.look_ahead);
-            let result = HeadlessGame::new(rng, agent, self.game_options).play();
+            let agent = AiAgent::new(BoardCost::new(coefficients), self.game_options.look_ahead);
+            let result = HeadlessGame::new(rng, agent, self.game_options, self.end_game).play();
             sum_result += result;
         }
         
@@ -132,6 +135,57 @@ impl HeadlessGameFixture {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct EndGame {
+    pub score: u32,
+    pub lines: u32,
+    pub level: u32,
+    pub duration: Duration,
+}
+
+impl Default for EndGame {
+    fn default() -> Self {
+        Self::NONE
+    }
+}
+
+impl EndGame {
+    pub const NONE: Self = Self {
+        score: u32::MAX,
+        lines: u32::MAX,
+        level: u32::MAX,
+        duration: Duration::MAX
+    };
+
+    pub fn of_score(score: u32) -> Self {
+        Self {
+            score,
+            ..Default::default()
+        }
+    }
+
+    pub fn of_lines(lines: u32) -> Self {
+        Self {
+            lines,
+            ..Default::default()
+        }
+    }
+
+    pub fn of_seconds(seconds: u64) -> Self {
+        Self {
+            duration: Duration::from_secs(seconds),
+            ..Default::default()
+        }
+    }
+    
+    pub fn is_end_game(&self, result: GameResult, duration: Duration) -> bool {
+        result.score() >= self.score
+            || result.lines() >= self.lines
+            || result.level() >= self.level
+            || duration >= self.duration
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -140,12 +194,8 @@ mod tests {
         HeadlessGameFixture::new(
             Config::default(),
             vec![100.into(), 101.into()],
-            HeadlessGameOptions::new(
-                Duration::from_millis(5_000),
-                Duration::from_millis(100),
-                Duration::from_millis(16),
-            ),
-            0
+            HeadlessGameOptions::default(),
+            EndGame::of_seconds(5)
         )
     }
     

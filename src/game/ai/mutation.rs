@@ -1,10 +1,10 @@
 use std::array;
 use std::ops::RangeInclusive;
 use rand::{Rng, SeedableRng};
-use std::collections::{HashSet, VecDeque};
+use std::collections::VecDeque;
 use rand_chacha::ChaChaRng;
 use crate::game::ai::board_cost::{Genome, COEFFICIENTS_COUNT};
-use crate::game::ai::coefficient::Coefficient;
+use crate::game::ai::coefficient::{Coefficient, RANDOM_RAW_COEFFICIENT_DELTA_RANGE};
 use crate::game::ai::generation_stats::GenerationStatistics;
 use crate::game::random::Seed;
 
@@ -23,9 +23,10 @@ impl RateLimits {
     pub const NEVER: Self = Self::from_static(0.0);
     pub const ALWAYS: Self = Self::from_static(1.0);
     
-    pub fn new(range: RangeInclusive<f64>, step: f64) -> Self {
+    pub fn new(range: RangeInclusive<f64>) -> Self {
         assert!(*range.start() >= 0.0 && *range.end() <= 1.0);
         let current = (range.start() + range.end()) / 2.0;
+        let step = (range.end() - range.start()) / 10.0;
         Self { range, step, current }
     }
     
@@ -45,14 +46,13 @@ impl RateLimits {
 
 impl Default for RateLimits {
     fn default() -> Self {
-        Self::new(0.05 ..= 0.2, 0.01)
+        Self::new(0.0 ..= 1.0)
     }
 }
 
 pub struct GenomeMutation {
     mutation_rate: RateLimits,
     crossover_rate: RateLimits,
-    mutation_magnitude: f64,
     samples: VecDeque<f64>,
     stat_fn: fn(GenerationStatistics) -> f64,
     rng: ChaChaRng,
@@ -62,12 +62,11 @@ impl GenomeMutation {
     fn new(
         mutation_rate: RateLimits,
         crossover_rate: RateLimits,
-        mutation_magnitude: f64,
         max_samples: usize,
         seed: Seed,
         stat_fn: fn(GenerationStatistics) -> f64
     ) -> Self {
-        Self { mutation_rate, crossover_rate, mutation_magnitude, samples: VecDeque::with_capacity(max_samples), stat_fn, rng: seed.into() }
+        Self { mutation_rate, crossover_rate, samples: VecDeque::with_capacity(max_samples), stat_fn, rng: seed.into() }
     }
     
     pub fn current_mutation_rate(&self) -> f64 {
@@ -81,34 +80,30 @@ impl GenomeMutation {
     pub fn of_median(
         mutation_rate: RateLimits,
         crossover_rate: RateLimits,
-        mutation_magnitude: f64,
         max_samples: usize,
         seed: Seed,
     ) -> Self {
         Self::new(
             mutation_rate,
             crossover_rate,
-            mutation_magnitude,
             max_samples,
             seed,
-            |stats: GenerationStatistics| stats.median().score() as f64
+            |stats: GenerationStatistics| stats.median().result().score() as f64
         )
     }
 
     pub fn of_max(
         mutation_rate: RateLimits,
         crossover_rate: RateLimits,
-        mutation_magnitude: f64,
         max_samples: usize,
         seed: Seed,
     ) -> Self {
         Self::new(
             mutation_rate,
             crossover_rate,
-            mutation_magnitude,
             max_samples,
             seed,
-            |stats: GenerationStatistics| stats.max().score() as f64
+            |stats: GenerationStatistics| stats.max().result().score() as f64
         )
     }
 
@@ -145,7 +140,7 @@ impl GenomeMutation {
     fn mutate(&mut self, genome: Genome) -> Genome {
         genome.map(|coefficient| {
             if self.mutation_rate.test(&mut self.rng) {
-                self.rng.mutate(self.mutation_magnitude, coefficient)
+                self.rng.mutate(coefficient)
             } else {
                 coefficient
             }
@@ -170,39 +165,40 @@ impl GenomeMutation {
     }
 
     pub fn parents(&mut self, population: &[(Genome, f64)], count: usize) -> Vec<[Genome; 2]> {
-        let population_softmax = scale(&population);
-        let mut parents: HashSet<[Genome; 2]> = HashSet::new();
+        let scaled_population = scale(&population);
+        let mut parents: Vec<[Genome; 2]> = vec![];
         for _ in 0..count {
             let mut next_parent = || {
                 let p: f64 = self.rng.random();
                 let mut cumsum = 0.0;
-                for (index, (_, prob)) in population_softmax.iter().enumerate() {
+                for (index, (_, prob)) in scaled_population.iter().enumerate() {
                     cumsum += prob;
                     if p <= cumsum {
                         return index;
                     }
                 }
-                population_softmax.len() - 1
+                scaled_population.len() - 1
             };
 
             let parent1_index = next_parent();
-            let (parent1, _) = population_softmax[parent1_index];
+            let (parent1, _) = scaled_population[parent1_index];
 
             let mut parent2_index = next_parent();
             loop {
                 if parent2_index != parent1_index {
-                    let (parent2, _) = population_softmax[parent2_index];
-                    if parent1 != parent2
-                        && !parents.contains(&[parent1, parent2])
-                        && !parents.contains(&[parent2, parent1]){
+                    let (parent2, _) = scaled_population[parent2_index];
+                    if parent1 != parent2 {
+                        // TODO prefer new parents but do not require
+                        // && !parents.contains(&[parent1, parent2])
+                        // && !parents.contains(&[parent2, parent1]) {
                         break;
                     }
                 }
-                parent2_index = (parent2_index + 1) % population_softmax.len();
+                parent2_index = (parent2_index + 1) % scaled_population.len();
             }
 
-            let (parent2, _) = population_softmax[parent2_index];
-            parents.insert([parent1, parent2]);
+            let (parent2, _) = scaled_population[parent2_index];
+            parents.push([parent1, parent2]);
         }
         parents.into_iter().collect()
     }
@@ -218,14 +214,20 @@ fn scale(population: &[(Genome, f64)]) -> Vec<(Genome, f64)> {
 }
 
 trait RngMutation {
-    fn mutate(&mut self, magnitude: f64, value: Coefficient) -> Coefficient;
+    fn mutate(&mut self, value: Coefficient) -> Coefficient;
 }
 
 impl<R: Rng + ?Sized> RngMutation for R {
-    fn mutate(&mut self, magnitude: f64, value: Coefficient) -> Coefficient {
-        let value_f64: f64 = value.into();
-        let delta = (value_f64 * magnitude).abs().clamp(0.001, 10.0);
-        Coefficient::from_f64(value_f64 + self.random_range(-delta ..= delta))
+    fn mutate(&mut self, value: Coefficient) -> Coefficient {
+        let random_chance: f64 = self.random();
+        if random_chance < 0.2 {
+            // small chance of a completely random value
+            self.random()
+        } else {
+            // otherwise just nudge the existing value
+            let delta = Coefficient::new(self.random_range(RANDOM_RAW_COEFFICIENT_DELTA_RANGE));
+            value + delta
+        }
     }
 }
 
@@ -234,22 +236,20 @@ mod tests {
     use itertools::Itertools;
     use super::*;
 
-    fn mutation<M : Into<Option<f64>>, MR: Into<Option<RateLimits>>, CR : Into<Option<RateLimits>>>(
-        mutation_magnitude: M,
+    fn mutation<MR: Into<Option<RateLimits>>, CR : Into<Option<RateLimits>>>(
         mutation_rate: MR,
         crossover_rate: CR
     ) -> GenomeMutation {
         GenomeMutation::of_max(
             mutation_rate.into().unwrap_or(RateLimits::default()),
             crossover_rate.into().unwrap_or(RateLimits::default()),
-            mutation_magnitude.into().unwrap_or(0.01),
             10,
             Seed::default()
         )
     }
     
     fn genome(i: i32) -> Genome {
-        [Coefficient(i as i64); COEFFICIENTS_COUNT]
+        [Coefficient::new(i as i64); COEFFICIENTS_COUNT]
     }
     
     #[test]
@@ -259,7 +259,7 @@ mod tests {
             let fitness = 0.5f64.powi(i); // 1.0, 0.5, 0.25, 0.125 etc
             (genome(i + 1), fitness)
         }).collect();
-        let parents = mutation(None, None, None).parents(&population, N / 2);
+        let parents = mutation(None, None).parents(&population, N / 2);
 
         assert_eq!(parents.len(), N / 2);
 
@@ -280,7 +280,7 @@ mod tests {
         let parent1 = genome(1);
         let parent2 = genome(2);
 
-        let [child1, child2] = mutation(0.0, RateLimits::NEVER, RateLimits::ALWAYS)
+        let [child1, child2] = mutation(RateLimits::NEVER, RateLimits::ALWAYS)
             .crossover(parent1, parent2);
 
         // With 100% crossover rate and 0% mutation rate, children should have swapped all genes without modification
@@ -293,7 +293,7 @@ mod tests {
         let parent1 = genome(1);
         let parent2 = genome(2);
 
-        let [child1, child2] = mutation(0.0, RateLimits::NEVER, RateLimits::NEVER)
+        let [child1, child2] = mutation(RateLimits::NEVER, RateLimits::NEVER)
             .crossover(parent1, parent2);
 
         // With 0% crossover rate and 0% mutation rate, children should be identical to parents
@@ -306,7 +306,7 @@ mod tests {
         let parent1 = genome(1);
         let parent2 = genome(2);
 
-        let [child1, child2] = mutation(0.01, RateLimits::ALWAYS, RateLimits::NEVER)
+        let [child1, child2] = mutation(RateLimits::ALWAYS, RateLimits::NEVER)
             .crossover(parent1, parent2);
 
         // With 100% mutation rate and non-zero magnitude, all genes should be modified
@@ -319,7 +319,7 @@ mod tests {
         let parent1 = genome(1);
         let parent2 = genome(2);
 
-        let children = mutation(0.01, RateLimits::from_static(0.1), RateLimits::from_static(0.2))
+        let children = mutation(RateLimits::from_static(0.1), RateLimits::from_static(0.15))
             .crossover(parent1, parent2);
 
         for child in children {
@@ -336,19 +336,28 @@ mod tests {
 
     #[test]
     fn mutates_coefficients() {
-        let mut rng = ChaChaRng::seed_from_u64(100);
-        let coefficient = Coefficient::from_f64(10.0);
-        let result = rng.mutate(0.1, coefficient);
+        let mut rng = ChaChaRng::seed_from_u64(101);
+        let coefficient = Coefficient::from_f64(1000.0);
+        let result = rng.mutate(coefficient);
         assert_ne!(result, coefficient);
-        assert!(result >= Coefficient::from_f64(9.0) && result <= Coefficient::from_f64(11.0));
+        assert!(result >= Coefficient::from_f64(990.0) && result <= Coefficient::from_f64(1010.0));
     }
     
     #[test]
     fn mutates_negative_coefficients() {
-        let mut rng = ChaChaRng::seed_from_u64(100);
-        let coefficient = Coefficient::from_f64(-10.0);
-        let result = rng.mutate(0.1, coefficient);
+        let mut rng = ChaChaRng::seed_from_u64(101);
+        let coefficient = Coefficient::from_f64(-1000.0);
+        let result = rng.mutate(coefficient);
         assert_ne!(result, coefficient);
-        assert!(result >= Coefficient::from_f64(-11.0) && result <= Coefficient::from_f64(-9.0));
+        assert!(result >= Coefficient::from_f64(-1010.0) && result <= Coefficient::from_f64(-990.0));
+    }
+
+    #[test]
+    fn mutation_can_completely_randomize_coefficients() {
+        let mut rng = ChaChaRng::seed_from_u64(100); // <- this seed triggers the rule
+        let coefficient = Coefficient::from_f64(1000.0);
+        let result = rng.mutate(coefficient);
+        assert_ne!(result, coefficient);
+        assert!(result < Coefficient::from_f64(990.0) || result > Coefficient::from_f64(1010.0));
     }
 }

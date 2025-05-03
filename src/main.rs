@@ -480,7 +480,7 @@ impl TetrisSdl {
         let mut max_level = 0;
         let mut frame_rate = FrameRate::new();
 
-        let mut ai = AiAgent::new(BoardCost::new(AiCoefficients::default()), PEEK_SIZE);
+        let mut ai = AiAgent::new(BoardCost::new(AiCoefficients::default()), 0);
         
         loop {
             let delta = frame_rate.update()?;
@@ -796,11 +796,11 @@ impl TetrisSdl {
         }
     }
 }
-fn main() -> Result<(), String> {
+fn main2() -> Result<(), String> {
     ga_main()
 }
 
-fn main2() -> Result<(), String> {
+fn main() -> Result<(), String> {
     let mut rustris = TetrisSdl::new()?;
     let texture_creator = rustris.canvas.texture_creator();
     let (_, window_height) = rustris.canvas.window().size();

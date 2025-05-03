@@ -1,36 +1,27 @@
 use std::collections::{HashSet, VecDeque};
+use std::ops::Sub;
+use crate::game::block::BlockState;
 use crate::game::board::{compact_destroy_lines, Board, BOARD_HEIGHT, BOARD_WIDTH};
 use crate::game::geometry::Point;
+use crate::game::tetromino::Minos;
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
-pub struct StackStats {
-    open_holes: u32,
-    closed_holes: u32,
-    max_heights: [u32; BOARD_WIDTH as usize],
-    sum_delta_height: u32,
-    max_delta_height: u32,
+pub struct BoardStats {
+    global: StackStats,
+    delta: StackStats,
     cleared_lines: u32,
+    tetromino_height: u32,
+    // TODO gaps that only a line piece would fit into
 }
 
-impl StackStats {
-    pub fn open_holes(&self) -> u32 {
-        self.open_holes
+impl BoardStats {
+
+    pub fn global(&self) -> StackStats {
+        self.global
     }
 
-    pub fn closed_holes(&self) -> u32 {
-        self.closed_holes
-    }
-    
-    pub fn max_heights(&self) -> [u32; BOARD_WIDTH as usize] {
-        self.max_heights
-    }
-
-    pub fn sum_delta_height(&self) -> u32 {
-        self.sum_delta_height
-    }
-    
-    pub fn max_delta_height(&self) -> u32 {
-        self.max_delta_height
+    pub fn delta(&self) -> StackStats {
+        self.delta
     }
 
     pub fn cleared_lines(&self) -> u32 {
@@ -38,79 +29,176 @@ impl StackStats {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub struct StackStats {
+    open_holes: i32,
+    closed_holes: i32,
+    max_height: i32,
+    sum_roughness: i32,
+    max_roughness: i32,
+    pillars: i32
+}
+
+
+impl StackStats {
+
+    pub fn open_holes(&self) -> i32 {
+        self.open_holes
+    }
+
+    pub fn closed_holes(&self) -> i32 {
+        self.closed_holes
+    }
+
+    pub fn max_height(&self) -> i32 {
+        self.max_height
+    }
+
+    pub fn sum_roughness(&self) -> i32 {
+        self.sum_roughness
+    }
+
+    pub fn max_roughness(&self) -> i32 {
+        self.max_roughness
+    }
+
+    pub fn pillars(&self) -> i32 {
+        self.pillars
+    }
+}
+
+impl Sub<StackStats> for StackStats {
+    type Output = StackStats;
+
+    fn sub(self, rhs: StackStats) -> Self::Output {
+
+        StackStats {
+            open_holes: self.open_holes - rhs.open_holes,
+            closed_holes: self.closed_holes - rhs.closed_holes,
+            max_height: self.max_height - rhs.max_height,
+            sum_roughness: self.sum_roughness - rhs.sum_roughness,
+            max_roughness: self.max_roughness - rhs.max_roughness,
+            pillars: self.pillars - rhs.pillars,
+        }
+    }
+}
+
 pub trait BoardFeatures {
-    fn stack_stats(&self) -> StackStats;
+    fn features(&self, new_minos: Minos) -> BoardStats;
+}
+
+
+fn stack_stats(mut board: Board) -> StackStats {
+    let mut holes: HashSet<Point> = HashSet::new();
+    let mut max_heights = [0; BOARD_WIDTH as usize];
+
+    for x in 0..BOARD_WIDTH as i32 {
+        let mut in_stack = false;
+        for y in (0..BOARD_HEIGHT as i32).rev() {
+            let point = Point::new(x, y);
+            if !board.block(point).is_empty() {
+                if !in_stack {
+                    max_heights[x as usize] = y as u32 + 1;
+                    in_stack = true;
+                }
+            } else if in_stack {
+                holes.insert(point);
+            }
+        }
+    }
+
+    let mut open_holes: HashSet<Point> = HashSet::new();
+    for p in holes.iter() {
+        let mut to_visit = VecDeque::from([p.translate(-1, 0), p.translate(1, 0)]);
+        while let Some(neighbour) = to_visit.pop_front() {
+            if neighbour.x < 0 || neighbour.x >= BOARD_WIDTH as i32 || !board.block(neighbour).is_empty() {
+                continue
+            }
+
+            if open_holes.contains(&neighbour) || !holes.contains(&neighbour) {
+                // a neighbour is an open hole this hole must also be open
+                // OR a neighbour is empty but not a hole then this must be an open hole
+                open_holes.insert(*p);
+                break
+            }
+
+            // neighbour is a hole, but we're not sure if it's an open hole yet so check the 2nd order neighbour
+            let neighbour2 = if neighbour.x > p.x {
+                neighbour.translate(1, 0)
+            } else {
+                neighbour.translate(-1, 0)
+            };
+            to_visit.push_back(neighbour2);
+        }
+    }
+
+    let mut max_roughness = 0;
+    let mut sum_roughness = 0;
+    let mut max_height = 0;
+    let mut pillars = 0;
+
+    for i in 0..max_heights.len() {
+        let prev = if i > 0 { Some(max_heights[i - 1]) } else { None };
+        let height = max_heights[i];
+        let next = max_heights.get(i + 1).copied();
+
+        max_height = max_height.max(height);
+
+        let prev_height_delta = if let Some(prev) = prev {
+            height as i32 - prev as i32
+        } else {
+            0
+        };
+
+        if prev.is_none() || prev_height_delta < -2 {
+            if next.is_none() {
+                // against the right edge
+                pillars += 1;
+            } else if let Some(next) = next {
+                let next_height_delta = next as i32 - height as i32;
+                if next_height_delta > 2 {
+                    pillars += 1;
+                }
+            }
+        }
+
+
+        let roughness = prev_height_delta.abs() as u32;
+        max_roughness = max_roughness.max(roughness);
+        sum_roughness += roughness;
+    }
+
+    StackStats {
+        open_holes: open_holes.len() as i32,
+        closed_holes: (holes.len() - open_holes.len()) as i32,
+        max_height: max_height as i32,
+        sum_roughness: sum_roughness as i32,
+        max_roughness: max_roughness as i32,
+        pillars
+    }
 }
 
 impl BoardFeatures for Board {
-    fn stack_stats(&self) -> StackStats {
-        let mut board = *self; // copy to apply the patterns if any
-
+    fn features(&self, new_minos: Minos) -> BoardStats {
+        // get stack stats AFTER the tetromino was locked AND any lines were cleared
+        let mut board = *self;
         let patterns = board.pattern();
         let cleared_lines = compact_destroy_lines(patterns).len() as u32;
         board.destroy(patterns);
+        let global = stack_stats(board);
 
-        let mut holes: HashSet<Point> = HashSet::new();
-        let mut max_heights = [0; BOARD_WIDTH as usize];
-
-        for x in 0..BOARD_WIDTH as i32 {
-            let mut in_stack = false;
-            for y in (0..BOARD_HEIGHT as i32).rev() {
-                let point = Point::new(x, y);
-                if !board.block(point).is_empty() {
-                    if !in_stack {
-                        max_heights[x as usize] = y as u32 + 1;
-                    }
-                    in_stack = true;
-                } else if in_stack {
-                    holes.insert(point);
-                }
-            }
+        // get stack stats BEFORE the tetromino was locked
+        let mut board = *self;
+        for p in new_minos {
+            board.set_block(p, BlockState::Empty);
         }
+        let before = stack_stats(board);
 
-        let mut open_holes: HashSet<Point> = HashSet::new();
-        for p in holes.iter() {
-            let mut to_visit = VecDeque::from([p.translate(-1, 0), p.translate(1, 0)]);
-            while let Some(neighbour) = to_visit.pop_front() {
-                if neighbour.x < 0 || neighbour.x >= BOARD_WIDTH as i32 || !board.block(neighbour).is_empty() {
-                    continue
-                }
-
-                if open_holes.contains(&neighbour) || !holes.contains(&neighbour) {
-                    // a neighbour is an open hole this hole must also be open
-                    // OR a neighbour is empty but not a hole then this must be an open hole
-                    open_holes.insert(*p);
-                    break
-                }
-
-                // neighbour is a hole, but we're not sure if it's an open hole yet so check the 2nd order neighbour
-                let neighbour2 = if neighbour.x > p.x {
-                    neighbour.translate(1, 0)
-                } else {
-                    neighbour.translate(-1, 0)
-                };
-                to_visit.push_back(neighbour2);
-            }
-        }
-
-        let mut last_height: Option<u32> = None;
-        let mut max_delta_height = 0;
-        let mut sum_delta_height = 0;
-
-        for height in max_heights {
-            let next_delta_height = last_height.map(|h| h.abs_diff(height)).unwrap_or(0);
-            max_delta_height = max_delta_height.max(next_delta_height);
-            sum_delta_height += next_delta_height;
-            last_height = Some(height);
-        }
-
-        StackStats {
-            open_holes: open_holes.len() as u32,
-            closed_holes: (holes.len() - open_holes.len()) as u32,
-            max_heights,
-            sum_delta_height,
-            max_delta_height,
-            cleared_lines
+        BoardStats {
+            global,
+            delta: global - before,
+            cleared_lines,
+            tetromino_height: new_minos.into_iter().map(|p| p.y).max().unwrap_or(0) as u32,
         }
     }
 }
@@ -119,18 +207,18 @@ impl BoardFeatures for Board {
 mod tests {
     use crate::game::block::BlockState;
     use crate::game::geometry::Rotation;
-    use crate::game::tetromino::TetrominoShape;
+    use crate::game::tetromino::{minos_of, TetrominoShape};
     use super::*;
 
     #[test]
     fn empty_board() {
-        let stats = Board::new().stack_stats();
-        assert_eq!(stats, StackStats::default());
+        let stats = Board::new().features(Default::default());
+        assert_eq!(stats, BoardStats::default());
     }
 
     #[test]
     fn no_holes() {
-        let stats = Board::new().having_stack_at(&[(0, 0)]).stack_stats();
+        let stats = Board::new().having_stack_at(&[(0, 0)]).features(Default::default()).global();
         assert_eq!(stats.closed_holes, 0);
         assert_eq!(stats.open_holes, 0);
     }
@@ -140,7 +228,7 @@ mod tests {
         let stats = Board::new().having_stack_at(&[
             (0, 1), (1, 1), (2, 1),
             (0, 0),         (2, 0)
-        ]).stack_stats();
+        ]).features(Default::default()).global();
         assert_eq!(stats.closed_holes, 1);
         assert_eq!(stats.open_holes, 0);
     }
@@ -150,7 +238,7 @@ mod tests {
         let stats = Board::new().having_stack_at(&[
             (0, 1), (1, 1),
                     (1, 0)
-        ]).stack_stats();
+        ]).features(Default::default()).global();
         assert_eq!(stats.closed_holes, 1);
         assert_eq!(stats.open_holes, 0);
     }
@@ -160,7 +248,7 @@ mod tests {
         let stats = Board::new().having_stack_at(&[
             (0, 1), (1, 1), (2, 1), (3, 1),
             (0, 0),                 (3, 0)
-        ]).stack_stats();
+        ]).features(Default::default()).global();
         assert_eq!(stats.closed_holes, 2);
         assert_eq!(stats.open_holes, 0);
     }
@@ -172,7 +260,7 @@ mod tests {
             (0, 2),         (2, 2),
             (0, 1), (1, 1), (2, 1),
             (0, 0),         (2, 0)
-        ]).stack_stats();
+        ]).features(Default::default()).global();
         assert_eq!(stats.closed_holes, 2);
         assert_eq!(stats.open_holes, 0);
     }
@@ -182,7 +270,7 @@ mod tests {
         let stats = Board::new().having_stack_at(&[
             (0, 1), (1, 1),
             (0, 0)
-        ]).stack_stats();
+        ]).features(Default::default()).global();
         assert_eq!(stats.closed_holes, 0);
         assert_eq!(stats.open_holes, 1);
     }
@@ -192,7 +280,7 @@ mod tests {
         let stats = Board::new().having_stack_at(&[
             (0, 1), (1, 1), (2, 1),
             (0, 0)
-        ]).stack_stats();
+        ]).features(Default::default()).global();
         assert_eq!(stats.closed_holes, 0);
         assert_eq!(stats.open_holes, 2);
     }
@@ -202,7 +290,7 @@ mod tests {
         let stats = Board::new().having_stack_at(&[
             (8, 1), (9, 1),
                     (9, 0)
-        ]).stack_stats();
+        ]).features(Default::default()).global();
         assert_eq!(stats.closed_holes, 0);
         assert_eq!(stats.open_holes, 1);
     }
@@ -212,7 +300,7 @@ mod tests {
         let stats = Board::new().having_stack_at(&[
             (7, 1), (8, 1), (9, 1),
                             (9, 0)
-        ]).stack_stats();
+        ]).features(Default::default()).global();
         assert_eq!(stats.closed_holes, 0);
         assert_eq!(stats.open_holes, 2);
     }
@@ -222,7 +310,7 @@ mod tests {
         let stats = Board::new().having_stack_at(&[
             (0, 1), (1, 1), (2, 1), (3, 1), (4, 1),     (6, 1), (7, 1), (8, 1), (9, 1),
             (0, 0),                                                             (9, 0)
-        ]).stack_stats();
+        ]).features(Default::default()).global();
         assert_eq!(stats.closed_holes, 0);
         assert_eq!(stats.open_holes, 7);
     }
@@ -234,83 +322,122 @@ mod tests {
             (0, 2), (1, 2), (2, 2), (3, 2), (4, 2),     (6, 2),         (8, 2),
             (0, 1), (1, 1),         (3, 1), (4, 1),     (6, 1), (7, 1), (8, 1),
             (0, 0),                                     (6, 0),                 (9, 0)
-        ]).stack_stats();
+        ]).features(Default::default()).global();
         assert_eq!(stats.closed_holes, 6);
         assert_eq!(stats.open_holes, 4);
     }
 
     #[test]
-    fn stack_stats_single_block_change() {
+    fn single_block_change() {
         let stats = Board::new().having_stack_at(&[
             (0, 0)
-        ]).stack_stats();
-        assert_eq!(stats.max_heights, [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-        assert_eq!(stats.sum_delta_height, 1);
-        assert_eq!(stats.max_delta_height, 1);
+        ]).features(Default::default()).global();
+        assert_eq!(stats.max_height, 1);
+        assert_eq!(stats.sum_roughness, 1);
+        assert_eq!(stats.max_roughness, 1);
+        assert_eq!(stats.pillars, 0);
     }
 
     #[test]
-    fn stack_stats_double_block_change() {
+    fn double_block_change() {
         let stats = Board::new().having_stack_at(&[
             (1, 0)
-        ]).stack_stats();
-        assert_eq!(stats.max_heights, [0, 1, 0, 0, 0, 0, 0, 0, 0, 0]);
-        assert_eq!(stats.sum_delta_height, 2);
-        assert_eq!(stats.max_delta_height, 1);
+        ]).features(Default::default()).global();
+        assert_eq!(stats.max_height, 1);
+        assert_eq!(stats.sum_roughness, 2);
+        assert_eq!(stats.max_roughness, 1);
+        assert_eq!(stats.pillars, 0);
     }
 
     #[test]
-    fn stack_stats_multi_level_change() {
+    fn multi_level_change() {
         let stats = Board::new().having_stack_at(&[
             (1, 1),
             (1, 0)
-        ]).stack_stats();
+        ]).features(Default::default()).global();
 
-        assert_eq!(stats.max_heights, [0, 2, 0, 0, 0, 0, 0, 0, 0, 0]);
-        assert_eq!(stats.sum_delta_height, 4);
-        assert_eq!(stats.max_delta_height, 2);
+        assert_eq!(stats.max_height, 2);
+        assert_eq!(stats.sum_roughness, 4);
+        assert_eq!(stats.max_roughness, 2);
+        assert_eq!(stats.pillars, 0);
     }
 
 
     #[test]
-    fn stack_stats_based_on_post_line_clear() {
+    fn based_on_post_line_clear() {
         let stats = Board::new().having_stack_at(&[
             (0, 1),
             (0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0), (8, 0), (9, 0)
-        ]).stack_stats();
+        ]).features(Default::default());
 
         assert_eq!(
-            stats,
+            stats.global(),
             StackStats {
                 open_holes: 0,
                 closed_holes: 0,
-                max_heights: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                sum_delta_height: 1,
-                cleared_lines: 1,
-                max_delta_height: 1
+                max_height: 1,
+                sum_roughness: 1,
+                max_roughness: 1,
+                pillars: 0
             }
         );
+        assert_eq!(stats.cleared_lines, 1);
     }
 
     #[test]
-    fn stack_stats_kitchen_sink() {
+    fn pillars_against_edges() {
+        let stats = Board::new().having_stack_at(&[
+
+            (1, 2), (8, 2),
+            (1, 1), (8, 1),
+            (1, 0), (8, 0)
+        ]).features(Default::default()).global();
+        assert_eq!(stats.pillars, 2);
+    }
+
+    #[test]
+    fn pillars_in_middle() {
+        let stats = Board::new().having_stack_at(&[
+
+            (0, 2), (2, 2),
+            (0, 1), (2, 1),
+            (0, 0), (2, 0)
+        ]).features(Default::default()).global();
+        assert_eq!(stats.pillars, 1);
+    }
+
+    #[test]
+    fn pillars_at_altitude() {
+        let stats = Board::new().having_stack_at(&[
+
+            (0, 3),         (2, 3),
+            (0, 2),         (2, 2),
+            (0, 1),         (2, 1),
+            (0, 0), (1, 0), (2, 0)
+        ]).features(Default::default()).global();
+        assert_eq!(stats.pillars, 1);
+    }
+
+    #[test]
+    fn kitchen_sink() {
         let stats = Board::new().having_stack_at(&[
                             (2, 3),         (4, 3),     (6, 3),         (8, 3),
             (0, 2), (1, 2), (2, 2), (3, 2), (4, 2),     (6, 2),         (8, 2),
             (0, 1), (1, 1),         (3, 1), (4, 1),     (6, 1), (7, 1), (8, 1),
             (0, 0),                                     (6, 0),                 (9, 0)
-        ]).stack_stats();
+        ]).features(Default::default()).global();
 
-        assert_eq!(stats.max_heights, [3, 3, 4, 3, 4, 0, 4, 2, 4, 1]);
-        assert_eq!(stats.sum_delta_height, 18);
-        assert_eq!(stats.max_delta_height, 4);
+        assert_eq!(stats.max_height, 4);
+        assert_eq!(stats.sum_roughness, 18);
+        assert_eq!(stats.max_roughness, 4);
+        assert_eq!(stats.pillars, 2); // one at x=5 and another at x=9
     }
 
     #[test]
     fn cleared_lines_1() {
         let stats = Board::new().having_stack_at(&[
             (0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0), (8, 0), (9, 0)
-        ]).stack_stats();
+        ]).features(Default::default());
         assert_eq!(stats.cleared_lines, 1);
     }
 
@@ -319,7 +446,7 @@ mod tests {
         let stats = Board::new().having_stack_at(&[
             (0, 1), (1, 1), (2, 1), (3, 1), (4, 1), (5, 1), (6, 1), (7, 1), (8, 1), (9, 1),
             (0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0), (8, 0), (9, 0),
-        ]).stack_stats();
+        ]).features(Default::default());
         assert_eq!(stats.cleared_lines, 2);
     }
 
@@ -329,7 +456,7 @@ mod tests {
             (0, 2), (1, 2), (2, 2), (3, 2), (4, 2), (5, 2), (6, 2), (7, 2), (8, 2), (9, 2),
             (0, 1), (1, 1), (2, 1), (3, 1), (4, 1), (5, 1), (6, 1), (7, 1), (8, 1), (9, 1),
             (0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0), (8, 0), (9, 0),
-        ]).stack_stats();
+        ]).features(Default::default());
         assert_eq!(stats.cleared_lines, 3);
     }
 
@@ -340,10 +467,35 @@ mod tests {
             (0, 2), (1, 2), (2, 2), (3, 2), (4, 2), (5, 2), (6, 2), (7, 2), (8, 2), (9, 2),
             (0, 1), (1, 1), (2, 1), (3, 1), (4, 1), (5, 1), (6, 1), (7, 1), (8, 1), (9, 1),
             (0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0), (8, 0), (9, 0),
-        ]).stack_stats();
+        ]).features(Default::default());
         assert_eq!(stats.cleared_lines, 4);
     }
+    
+    #[test]
+    fn new_closed_hole() {
+        let stats = Board::new().having_stack_at(&[
+            (0, 2), (1, 2),
+            (0, 1), (1, 1),
+            (0, 0),         (2, 0),
+        ]).features(minos_of((0, 2), (1, 2), (0, 1), (1, 1)));
+        assert_eq!(stats.global.closed_holes, 1);
+        assert_eq!(stats.global.open_holes, 0);
+        assert_eq!(stats.delta.closed_holes, 1);
+        assert_eq!(stats.delta.open_holes, 0);
+    }
 
+    #[test]
+    fn new_open_hole() {
+        let stats = Board::new().having_stack_at(&[
+            (0, 2), (1, 2),
+            (0, 1), (1, 1),
+            (0, 0),
+        ]).features(minos_of((0, 2), (1, 2), (0, 1), (1, 1)));
+        assert_eq!(stats.global.closed_holes, 0);
+        assert_eq!(stats.global.open_holes, 1);
+        assert_eq!(stats.delta.closed_holes, 0);
+        assert_eq!(stats.delta.open_holes, 1);
+    }
 
     trait BoardHarness {
         fn having_stack_at(&mut self, points: &[(u32, u32)]) -> &mut Self;

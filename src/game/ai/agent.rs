@@ -1,8 +1,11 @@
+use std::cmp::Ordering;
+use itertools::Itertools;
 use crate::game::ai::apply_inputs::ApplyInputs;
 use crate::game::ai::board_cost::BoardCost;
 use crate::game::ai::input_search::{InputSearch, InputSequenceResult};
 use crate::game::ai::input_sequence::InputSequence;
 use crate::game::{Game, GameState};
+use crate::game::ai::board_features::{BoardFeatures, StackStats};
 use crate::game::board::Board;
 use crate::game::tetromino::TetrominoShape;
 
@@ -71,59 +74,61 @@ impl AiAgent {
     }
     
     fn best_move(&self, game: &Game, shape: TetrominoShape, peek: &[TetrominoShape]) -> Option<(InputSequence, f64)> {
-        if peek.is_empty() {
-            return self.best_single_move(&game.board, shape)
+        let stack_stats_before = game.board.stack_stats();
+        
+        if peek.is_empty() || self.look_ahead == 0 {
+            return self.best_single_move(game.board, game.board.stack_stats(), shape)
                 .map(|(result, cost)| (result.inputs(), cost));
         }
+        
+        let inputs = game.board.search_all_inputs(shape);
+        let input_len = inputs.len();
 
-        let current_moves = game.board.search_all_inputs(shape);
-        if current_moves.is_empty() {
-            return None;
-        }
-
-        // For each current move, evaluate all possible future positions
-        let moves_with_costs: Vec<_> = current_moves
+        inputs
             .into_iter()
-            .map(|initial_move| {
+            // first order by the cost of the initial move
+            .map(|r| (r, self.cost.cost(&game.board, stack_stats_before, r.board())))
+            .sorted_by(|m1, m2| self.compare_moves(m2, m1))
+            
+            // next look ahead and take the best result over the entire peek sequence
+            .take(input_len / 2) // for performance, prune the search space to the top 50th percentile, TODO configurable
+            .filter_map(|(initial_move, _)| {
                 let mut current_board = initial_move.board();
-                let mut sum_cost = self.cost.cost(current_board, initial_move.minos());
+                let mut bad_sequence = false;
 
                 // Try each piece in the peek sequence
                 for &next_shape in peek.iter().take(self.look_ahead) {
                     // TODO could use the held tetromino here
-                    if let Some((next_result, next_move_cost)) = self.best_single_move(&current_board, next_shape) {
-                        sum_cost += next_move_cost;
+                    if let Some((next_result, _)) = self.best_single_move(current_board, current_board.stack_stats(), next_shape) {
                         current_board = next_result.board();
                     } else {
-                        // punish a bad sequence
-                        sum_cost -= 1_000_000.0;
+                        bad_sequence = true;
                         break;
                     }
                 }
-
-                (initial_move.inputs(), sum_cost / peek.len() as f64)
+                
+                if bad_sequence {
+                    None
+                } else {
+                    // cost from the start to the end
+                    let score = self.cost.cost(&game.board, stack_stats_before, current_board);
+                    Some((initial_move, score))
+                }
             })
-            .collect();
-
-        moves_with_costs.into_iter().max_by(|(result1, cost1), (result2, cost2)| {
-            cost1.total_cmp(cost2).then_with(|| result1.cmp(&result2))
-        })
+            .max_by(|m1, m2| self.compare_moves(m1, m2))
+            .map(|(result, score)| (result.inputs(), score))
     }
 
 
-    fn best_single_move(&self, board: &Board, shape: TetrominoShape) -> Option<(InputSequenceResult, f64)> {
-        let moves: Vec<_> = board.search_all_inputs(shape)
+    fn best_single_move(&self, board_from: Board, stack_stats_before: StackStats, shape: TetrominoShape) -> Option<(InputSequenceResult, f64)> {
+        board_from.search_all_inputs(shape)
             .into_iter()
-            .map(|r| (r, self.cost.cost(r.board(), r.minos())))
-            .collect();
+            .map(|r| (r, self.cost.cost(&board_from, stack_stats_before, r.board())))
+            .max_by(|m1, m2| self.compare_moves(m1, m2))
+    }
 
-        if moves.is_empty() {
-            return None;
-        }
-
-        moves.into_iter().max_by(|(result1, cost1), (result2, cost2)| {
-            cost1.total_cmp(cost2).then_with(|| result1.inputs().cmp(&result2.inputs()))
-        })
+    fn compare_moves(&self, (result1, cost1): &(InputSequenceResult, f64), (result2, cost2): &(InputSequenceResult, f64)) -> Ordering {
+        cost1.total_cmp(cost2).then_with(|| result1.inputs().cmp(&result2.inputs()))
     }
 
 }

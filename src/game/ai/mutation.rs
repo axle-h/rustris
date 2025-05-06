@@ -137,7 +137,7 @@ impl GenomeMutation {
         array::from_fn(|_| self.rng.random())
     }
     
-    fn mutate(&mut self, genome: Genome) -> Genome {
+    pub fn mutate(&mut self, genome: Genome) -> Genome {
         genome.map(|coefficient| {
             if self.mutation_rate.test(&mut self.rng) {
                 self.rng.mutate(coefficient)

@@ -1,5 +1,5 @@
 use std::fmt::{Debug, Display, Formatter};
-use crate::game::ai::board_features::BoardFeatures;
+use crate::game::ai::board_features::{BoardFeatures, StackStats};
 use crate::game::ai::coefficient::Coefficient;
 use crate::game::board::{Board, BOARD_WIDTH};
 use crate::game::tetromino::Minos;
@@ -13,22 +13,23 @@ pub struct AiCoefficients {
     max_stack_roughness: Coefficient,
     line_clear: Coefficient,
     tetris_clear: Coefficient,
-    tetromino_height: Coefficient,
+    max_tetromino_y: Coefficient,
     pillars: Coefficient
+    // TODO rhs column height
 }
 
 impl Default for AiCoefficients {
     fn default() -> Self {
         AiCoefficients::from_f64(
-            -92.40,
-            -106.84,
-            -0.27,
-            -30.96,
-            10.82,
-            -2.32,
-            94.70,
-            -44.73,
-            0.0
+            -89.32,
+            -104.13,
+            -10.12,
+            -7.96,
+            -7.19,
+            -25.65,
+            18.87,
+            -4.49,
+            -57.45
         )
     }
 }
@@ -36,7 +37,7 @@ impl Default for AiCoefficients {
 impl Display for AiCoefficients {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "[{:.2}, {:.2}, {:.2}, {:.2}, {:.2}, {:.2}, {:.2}, {:.2}, {:.2}]",
-               self.open_holes, self.closed_holes, self.max_stack_height, self.sum_stack_roughness, self.max_stack_roughness, self.line_clear, self.tetris_clear, self.tetromino_height, self.pillars)
+               self.open_holes, self.closed_holes, self.max_stack_height, self.sum_stack_roughness, self.max_stack_roughness, self.line_clear, self.tetris_clear, self.max_tetromino_y, self.pillars)
     }
 }
 
@@ -49,7 +50,7 @@ impl AiCoefficients {
         max_stack_roughness: Coefficient::ZERO,
         line_clear: Coefficient::ZERO,
         tetris_clear: Coefficient::ZERO,
-        tetromino_height: Coefficient::ZERO,
+        max_tetromino_y: Coefficient::ZERO,
         pillars: Coefficient::ZERO,
     };
 
@@ -61,7 +62,7 @@ impl AiCoefficients {
         max_delta_stack_height: f64,
         line_clear: f64,
         tetris_clear: f64,
-        tetromino_height: f64,
+        max_tetromino_y: f64,
         pillars: f64
     ) -> Self {
         Self {
@@ -72,7 +73,7 @@ impl AiCoefficients {
             max_stack_roughness: max_delta_stack_height.into(),
             line_clear: line_clear.into(),
             tetris_clear: tetris_clear.into(),
-            tetromino_height: tetromino_height.into(),
+            max_tetromino_y: max_tetromino_y.into(),
             pillars: pillars.into(),
         }
     }
@@ -85,7 +86,7 @@ impl AiCoefficients {
         max_delta_stack_height: i64,
         line_clear: i64,
         tetris_clear: i64,
-        tetromino_height: i64,
+        max_tetromino_y: i64,
         pillars: i64
     ) -> Self {
         Self {
@@ -96,7 +97,7 @@ impl AiCoefficients {
             max_stack_roughness: max_delta_stack_height.into(),
             line_clear: line_clear.into(),
             tetris_clear: tetris_clear.into(),
-            tetromino_height: tetromino_height.into(),
+            max_tetromino_y: max_tetromino_y.into(),
             pillars: pillars.into(),
         }
     }   
@@ -116,7 +117,7 @@ impl Into<Genome> for AiCoefficients {
             self.max_stack_roughness,
             self.line_clear,
             self.tetris_clear,
-            self.tetromino_height,
+            self.max_tetromino_y,
             self.pillars,
         ]
     }
@@ -132,7 +133,7 @@ impl From<Genome> for AiCoefficients {
             max_stack_roughness,
             line_clear,
             tetris_clear,
-            tetromino_height,
+            max_tetromino_y,
             pillars,
         ] = flat;
         Self {
@@ -143,7 +144,7 @@ impl From<Genome> for AiCoefficients {
             max_stack_roughness,
             line_clear,
             tetris_clear,
-            tetromino_height,
+            max_tetromino_y,
             pillars,
         }
     }
@@ -158,8 +159,8 @@ impl BoardCost {
         Self { coefficients }
     }
 
-    pub fn cost(&self, board: Board, new_minos: Minos) -> f64 {
-        let features = board.features(new_minos);
+    pub fn cost(&self, board_before_action: &Board, stats_before_action: StackStats, board_after_action: Board) -> f64 {
+        let features = board_after_action.features_after_action(board_before_action, stats_before_action);
         
         let delta = features.delta();
 
@@ -168,6 +169,8 @@ impl BoardCost {
             delta.max_height() as f64 * self.coefficients.max_stack_height +
             delta.sum_roughness() as f64 * self.coefficients.sum_stack_roughness +
             delta.max_roughness() as f64 * self.coefficients.max_stack_roughness +
+            features.max_tetromino_y() as f64 * self.coefficients.max_tetromino_y +
+            delta.pillars() as f64 * self.coefficients.pillars +
             match features.cleared_lines() {
                 1..=3 => features.cleared_lines() as f64 * self.coefficients.line_clear,
                 4 => features.cleared_lines() as f64 * self.coefficients.tetris_clear,

@@ -5,7 +5,7 @@ use crate::game::board::Board;
 use crate::game::tetromino::{Minos, TetrominoShape};
 
 pub trait InputSearch {
-    fn search_all_inputs(&self, shape: TetrominoShape) -> Vec<InputSequenceResult>;
+    fn search_all_inputs(self, shape: TetrominoShape) -> Vec<InputSequenceResult>;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -30,10 +30,9 @@ impl InputSequenceResult {
 }
 
 impl InputSearch for Board {
-    fn search_all_inputs(&self, shape: TetrominoShape) -> Vec<InputSequenceResult> {
-        let mut spawned_board = *self;
-        spawned_board.clear_tetromino();
-        if spawned_board.try_spawn_tetromino(shape).is_none() {
+    fn search_all_inputs(mut self, shape: TetrominoShape) -> Vec<InputSequenceResult> {
+        self.clear_tetromino();
+        if self.try_spawn_tetromino(shape).is_none() {
             // cannot even place the tetromino, no possible inputs
             return Vec::default();
         }
@@ -45,7 +44,7 @@ impl InputSearch for Board {
         visit_queue.push_back(InputSequence::default());
 
         while let Some(inputs) = visit_queue.pop_front() {
-            let mut current_board = spawned_board;
+            let mut current_board = self;
             if !current_board.apply_inputs(inputs) {
                 continue;
             }

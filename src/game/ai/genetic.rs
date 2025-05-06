@@ -5,11 +5,12 @@ use std::time::Instant;
 use itertools::Itertools;
 use rayon::prelude::*;
 use crate::config::Config;
-use crate::game::ai::board_cost::Genome;
+use crate::game::ai::board_cost::{AiCoefficients, Genome};
 use crate::game::ai::game_result::GameResult;
 use crate::game::ai::generation_stats::{GenerationResult, GenerationStatistics};
 use crate::game::ai::headless_game::{EndGame, HeadlessGameFixture, HeadlessGameOptions};
 use crate::game::ai::mutation::{GenomeMutation, RateLimits};
+
 
 pub struct GeneticAlgorithm {
     population: [Genome; POPULATION_SIZE],
@@ -26,9 +27,23 @@ const POPULATION_SIZE: usize = 1000;
 
 impl GeneticAlgorithm {
     // TODO increase game length as games start to get longer
-    pub fn new(fixture: HeadlessGameFixture, elite_count: usize, mut mutation: GenomeMutation, end_game: EndGame, max_generations: usize) -> Self {
+    pub fn new(
+        fixture: HeadlessGameFixture,
+        elite_count: usize,
+        mut mutation: GenomeMutation,
+        end_game: EndGame,
+        max_generations: usize,
+        population_seed: Option<AiCoefficients>
+    ) -> Self {
+        let genome_seed: Option<Genome> = population_seed.map(|seed| seed.into());
         Self {
-            population: array::from_fn(|_| mutation.random()),
+            population: array::from_fn(|_| {
+                if let Some(genome_seed) = genome_seed {
+                    mutation.mutate(genome_seed)
+                } else {
+                    mutation.random()
+                }
+            }),
             generations: vec![],
             fixture,
             mutation,
@@ -158,15 +173,15 @@ pub fn ga_main() -> Result<(), String> {
         Config::default(),
         vec![rand::random()],
         HeadlessGameOptions::default(),
-        EndGame::of_lines(1000) // TODO what is the world record?
+        EndGame::of_lines(10_000) // TODO what is the world record?
     );
     let mutation = GenomeMutation::of_max(
-        RateLimits::new(0.01 ..= 0.20),
-        RateLimits::new(0.01 ..= 0.20),
+        RateLimits::new(0.1 ..= 0.20),
+        RateLimits::new(0.1 ..= 0.20),
         5,
         rand::random()
     );
-    GeneticAlgorithm::new(fixture, 2, mutation, EndGame::NONE, 10_000).run();
+    GeneticAlgorithm::new(fixture, 2, mutation, EndGame::NONE, 10_000, Some(AiCoefficients::default())).run();
     
     Ok(())
 }
@@ -188,7 +203,7 @@ mod tests {
             EndGame::of_seconds(2)
         );
         let mutation = GenomeMutation::of_max(RateLimits::default(), RateLimits::default(), 5, 100.into());
-        GeneticAlgorithm::new(fixture, 2, mutation, EndGame::NONE, 1).run();
+        GeneticAlgorithm::new(fixture, 2, mutation, EndGame::NONE, 1, None).run();
 
         assert!(true);
     }

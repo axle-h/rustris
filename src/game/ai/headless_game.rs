@@ -6,7 +6,7 @@ use crate::game::ai::agent::AiAgent;
 use crate::game::ai::board_cost::{BoardCost, AiCoefficients};
 use crate::game::ai::game_result::GameResult;
 use crate::game::Game;
-use crate::game::random::{RandomTetromino, Seed};
+use crate::game::random::{RandomTetromino, Seed, PEEK_SIZE};
 
 pub struct HeadlessGame {
     agent: AiAgent,
@@ -82,22 +82,12 @@ pub struct HeadlessGameOptions {
     look_ahead: usize
 }
 
-impl HeadlessGameOptions {
-    pub fn new(line_clear_delay: Duration, step: Duration, look_ahead: usize) -> Self {
-        Self {
-            line_clear_delay,
-            step,
-            look_ahead
-        }
-    }
-}
-
 impl Default for HeadlessGameOptions {
     fn default() -> Self {
         Self {
             step: Duration::from_millis(16), // 60hz
             line_clear_delay: SWEEP_DURATION,
-            look_ahead: 0 // TODO it's too slow
+            look_ahead: 2
         }   
     }
 }
@@ -139,7 +129,6 @@ impl HeadlessGameFixture {
 pub struct EndGame {
     pub score: u32,
     pub lines: u32,
-    pub level: u32,
     pub duration: Duration,
 }
 
@@ -153,7 +142,6 @@ impl EndGame {
     pub const NONE: Self = Self {
         score: u32::MAX,
         lines: u32::MAX,
-        level: u32::MAX,
         duration: Duration::MAX
     };
 
@@ -181,7 +169,6 @@ impl EndGame {
     pub fn is_end_game(&self, result: GameResult, duration: Duration) -> bool {
         result.score() >= self.score
             || result.lines() >= self.lines
-            || result.level() >= self.level
             || duration >= self.duration
     }
 }

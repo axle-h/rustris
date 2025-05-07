@@ -129,5 +129,20 @@ Algorithm:
 
 TODO
 
-* Fix hold not working, probably need to add state to use the alt on the next frame
-* Add new cost for number of cleared blocks
+* agent
+   * drop open holes, a hole is a hole
+   * allow one pillar
+   * the lookahead doesnt seem to be doing anything useful given it's cost, drop it
+* MLP
+   * Maybe the issue is that the fitness function is strictly linear
+   * Instead I could build a MLP with inputs
+      * Current tetromino (just an ID)
+      * Next n tetrominos
+      * All the existing metrics e.g. holes, max height
+   * And output a single neuron which is the score/cost of the move
+   * We still classify the moves based on this score, i.e. the network is not sending inputs, no costly RL required 
+   * We evolve it with GA as usual, maybe using NEAT
+* genetic algorithm speciation
+   * define minimum distance between a species OR use k-means
+   * classify the population into species
+   * ensure we retain at least 2, 3, 4 of the best species per generation

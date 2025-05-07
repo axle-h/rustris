@@ -1,5 +1,5 @@
 use std::array;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::{Add, Div};
 use std::time::Instant;
 use itertools::Itertools;
@@ -23,7 +23,7 @@ pub struct GeneticAlgorithm {
     max_generations: usize,
 }
 
-const POPULATION_SIZE: usize = 1000;
+const POPULATION_SIZE: usize = 200;
 
 impl GeneticAlgorithm {
     // TODO increase game length as games start to get longer
@@ -116,7 +116,7 @@ impl GeneticAlgorithm {
 
     fn next_generation(&mut self, labelled_population: Vec<(Genome, GameResult)>) -> Vec<Genome> {
         // TODO use this same score for classification above
-        let survived_population: Vec<_> = labelled_population.into_iter()
+        let surviving_population: Vec<_> = labelled_population.into_iter()
             .map(|(genome, result)| {
                 let game_over_penalty = if result.game_over() { 100_000.0 } else { 0.0 };
                 let fitness = result.score() as f64 - game_over_penalty;
@@ -126,13 +126,31 @@ impl GeneticAlgorithm {
             .take(POPULATION_SIZE / 2) // TODO configurable survival rate
             .collect();
 
-        let elite_population: Vec<_> = survived_population.iter().take(self.elite_count).map(|(genome, _)| *genome).collect();
-        let children_count = ((POPULATION_SIZE as f64 - elite_population.len() as f64) / 2.0).ceil() as usize; // TODO pre-calculate this
-        let children: Vec<_> = self.mutation.parents(&survived_population, children_count).into_iter()
-            .flat_map(|[parent1, parent2]| self.mutation.crossover(parent1, parent2))
-            .collect();
+        let children_count = ((POPULATION_SIZE as f64 - self.elite_count as f64) / 2.0).ceil() as usize; // TODO pre-calculate this
+        let parents = self.mutation.parents(&surviving_population, children_count);
         
-        elite_population.into_iter().chain(children).take(POPULATION_SIZE).collect()
+        let mut next_population: HashSet<_> = parents.iter()
+            .flat_map(|[parent1, parent2]| self.mutation.crossover(*parent1, *parent2))
+            .collect();
+
+        for (elite, _) in surviving_population.iter().take(self.elite_count).copied() {
+            next_population.insert(elite);
+        }
+        
+        // ensure we have enough unique children
+        while next_population.len() < POPULATION_SIZE {
+            for [parent1, parent2] in parents.iter() {
+                let [child1, child2] = self.mutation.crossover(*parent1, *parent2);
+                next_population.insert(child1);
+                next_population.insert(child2);
+                
+                if next_population.len() >= POPULATION_SIZE {
+                    break
+                }
+            }
+        }
+
+        next_population.into_iter().take(POPULATION_SIZE).collect()
     }
 }
 

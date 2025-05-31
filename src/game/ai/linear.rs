@@ -1,11 +1,9 @@
-use std::fmt::{Debug, Display, Formatter};
-use crate::game::ai::board_features::{BoardFeatures, StackStats};
+use std::fmt::{Display, Formatter};
 use crate::game::ai::coefficient::Coefficient;
-use crate::game::board::{Board, BOARD_WIDTH};
-use crate::game::tetromino::Minos;
+use crate::game::ai::genome::LinearGenome;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct AiCoefficients {
+pub struct LinearCoefficients {
     open_holes: Coefficient,
     closed_holes: Coefficient,
     max_stack_height: Coefficient,
@@ -18,9 +16,9 @@ pub struct AiCoefficients {
     // TODO rhs column height
 }
 
-impl Default for AiCoefficients {
+impl Default for LinearCoefficients {
     fn default() -> Self {
-        AiCoefficients::from_f64(
+        LinearCoefficients::from_f64(
             -89.32,
             -104.13,
             -10.12,
@@ -34,14 +32,14 @@ impl Default for AiCoefficients {
     }
 }
 
-impl Display for AiCoefficients {
+impl Display for LinearCoefficients {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "[{:.2}, {:.2}, {:.2}, {:.2}, {:.2}, {:.2}, {:.2}, {:.2}, {:.2}]",
                self.open_holes, self.closed_holes, self.max_stack_height, self.sum_stack_roughness, self.max_stack_roughness, self.line_clear, self.tetris_clear, self.max_tetromino_y, self.pillars)
     }
 }
 
-impl AiCoefficients {
+impl LinearCoefficients {
     pub const ZERO: Self = Self {
         open_holes: Coefficient::ZERO,
         closed_holes: Coefficient::ZERO,
@@ -100,31 +98,65 @@ impl AiCoefficients {
             max_tetromino_y: max_tetromino_y.into(),
             pillars: pillars.into(),
         }
-    }   
-    
-}
+    }
 
-pub const COEFFICIENTS_COUNT: usize = 9;
-pub type Genome = [Coefficient; COEFFICIENTS_COUNT];
+    pub fn open_holes(&self) -> Coefficient {
+        self.open_holes
+    }
 
-impl Into<Genome> for AiCoefficients {
-    fn into(self) -> Genome {
-        [
-            self.open_holes,
-            self.closed_holes,
-            self.max_stack_height,
-            self.sum_stack_roughness,
-            self.max_stack_roughness,
-            self.line_clear,
-            self.tetris_clear,
-            self.max_tetromino_y,
-            self.pillars,
-        ]
+    pub fn closed_holes(&self) -> Coefficient {
+        self.closed_holes
+    }
+
+    pub fn max_stack_height(&self) -> Coefficient {
+        self.max_stack_height
+    }
+
+    pub fn sum_stack_roughness(&self) -> Coefficient {
+        self.sum_stack_roughness
+    }
+
+    pub fn max_stack_roughness(&self) -> Coefficient {
+        self.max_stack_roughness
+    }
+
+    pub fn line_clear(&self) -> Coefficient {
+        self.line_clear
+    }
+
+    pub fn tetris_clear(&self) -> Coefficient {
+        self.tetris_clear
+    }
+
+    pub fn max_tetromino_y(&self) -> Coefficient {
+        self.max_tetromino_y
+    }
+
+    pub fn pillars(&self) -> Coefficient {
+        self.pillars
     }
 }
 
-impl From<Genome> for AiCoefficients {
-    fn from(flat: Genome) -> Self {
+impl Into<LinearGenome> for LinearCoefficients {
+    fn into(self) -> LinearGenome {
+        LinearGenome::new(
+            [
+                self.open_holes,
+                self.closed_holes,
+                self.max_stack_height,
+                self.sum_stack_roughness,
+                self.max_stack_roughness,
+                self.line_clear,
+                self.tetris_clear,
+                self.max_tetromino_y,
+                self.pillars,
+            ]
+        )
+    }
+}
+
+impl From<LinearGenome> for LinearCoefficients {
+    fn from(genome: LinearGenome) -> Self {
         let [
             open_holes,
             closed_holes,
@@ -135,7 +167,7 @@ impl From<Genome> for AiCoefficients {
             tetris_clear,
             max_tetromino_y,
             pillars,
-        ] = flat;
+        ] = genome.chromosome();
         Self {
             open_holes,
             closed_holes,
@@ -147,34 +179,5 @@ impl From<Genome> for AiCoefficients {
             max_tetromino_y,
             pillars,
         }
-    }
-}
-
-pub struct BoardCost {
-    coefficients: AiCoefficients
-}
-
-impl BoardCost {
-    pub fn new(coefficients: AiCoefficients) -> Self {
-        Self { coefficients }
-    }
-
-    pub fn cost(&self, board_before_action: &Board, stats_before_action: StackStats, board_after_action: Board) -> f64 {
-        let features = board_after_action.features_after_action(board_before_action, stats_before_action);
-        
-        let delta = features.delta();
-
-        delta.open_holes() as f64 * self.coefficients.open_holes +
-            delta.closed_holes() as f64 * self.coefficients.closed_holes +
-            delta.max_height() as f64 * self.coefficients.max_stack_height +
-            delta.sum_roughness() as f64 * self.coefficients.sum_stack_roughness +
-            delta.max_roughness() as f64 * self.coefficients.max_stack_roughness +
-            features.max_tetromino_y() as f64 * self.coefficients.max_tetromino_y +
-            delta.pillars() as f64 * self.coefficients.pillars +
-            match features.cleared_lines() {
-                1..=3 => features.cleared_lines() as f64 * self.coefficients.line_clear,
-                4 => features.cleared_lines() as f64 * self.coefficients.tetris_clear,
-                _ => 0.0
-            }
     }
 }

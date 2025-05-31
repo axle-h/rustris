@@ -53,20 +53,16 @@ use sdl2::mixer::{InitFlag as MixerInitFlag, AUDIO_S16LSB, DEFAULT_CHANNELS};
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::{Texture, WindowCanvas};
-use sdl2::sys::mixer::MIX_CHANNELS;
 use sdl2::ttf::Sdl2TtfContext;
 
 use sdl2::{AudioSubsystem, EventPump, Sdl};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::str::FromStr;
-
 use crate::menu::sound::MenuSound;
 use theme_context::{PlayerTextures, TextureMode, ThemeContext};
 use crate::game::ai::agent::AiAgent;
-use crate::game::ai::board_cost::{BoardCost, AiCoefficients};
 use crate::game::ai::genetic::ga_main;
-use crate::game::random::PEEK_SIZE;
 use crate::icon::app_icon;
 
 #[cfg(not(feature = "retro_handheld"))]
@@ -480,7 +476,7 @@ impl TetrisSdl {
         let mut max_level = 0;
         let mut frame_rate = FrameRate::new();
 
-        let mut ai = AiAgent::new(BoardCost::new(AiCoefficients::default()), 2);
+        let mut ai = AiAgent::default();
         
         loop {
             let delta = frame_rate.update()?;
@@ -797,7 +793,8 @@ impl TetrisSdl {
     }
 }
 fn main() -> Result<(), String> {
-    ga_main()
+    ga_main();
+    Ok(())
 }
 
 fn main2() -> Result<(), String> {

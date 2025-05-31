@@ -37,6 +37,18 @@ impl TetrominoShape {
         TetrominoShape::J,
         TetrominoShape::L,
     ];
+    
+    pub fn id(&self) -> u8 {
+        match self {
+            TetrominoShape::I => 0,
+            TetrominoShape::O => 1,
+            TetrominoShape::T => 2,
+            TetrominoShape::S => 3,
+            TetrominoShape::Z => 4,
+            TetrominoShape::J => 5,
+            TetrominoShape::L => 6
+        }
+    }
 
     pub fn meta(&self) -> &TetrominoMeta {
         match self {

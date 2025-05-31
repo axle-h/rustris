@@ -3,10 +3,11 @@ use crate::animation::destroy::SWEEP_DURATION;
 use crate::config::Config;
 use crate::event::GameEvent;
 use crate::game::ai::agent::AiAgent;
-use crate::game::ai::board_cost::{BoardCost, AiCoefficients};
+use crate::game::ai::action_evaluator::ActionEvaluator;
 use crate::game::ai::game_result::GameResult;
+use crate::game::ai::linear::LinearCoefficients;
 use crate::game::Game;
-use crate::game::random::{RandomTetromino, Seed, PEEK_SIZE};
+use crate::game::random::{RandomTetromino, Seed};
 
 pub struct HeadlessGame {
     agent: AiAgent,
@@ -104,7 +105,7 @@ impl HeadlessGameFixture {
         Self { config, seeds, game_options, end_game }
     }
     
-    pub fn play(&self, coefficients: AiCoefficients) -> GameResult {
+    pub fn play(&self, action_evaluate: ActionEvaluator) -> GameResult {
         let mut sum_result = GameResult::default();
         for seed in self.seeds.iter() {
             let rng = RandomTetromino::new(
@@ -112,7 +113,7 @@ impl HeadlessGameFixture {
                 self.config.game.min_garbage_per_hole,
                 *seed
             );
-            let agent = AiAgent::new(BoardCost::new(coefficients), self.game_options.look_ahead);
+            let agent = AiAgent::new(action_evaluate, self.game_options.look_ahead);
             let result = HeadlessGame::new(rng, agent, self.game_options, self.end_game).play();
             sum_result += result;
         }
@@ -189,15 +190,17 @@ mod tests {
     #[test]
     fn runs_headless_game() {
         let fixture = test_fixture();
-        let result = fixture.play(AiCoefficients::default());
+        let evaluator = ActionEvaluator::Linear(LinearCoefficients::default());
+        let result = fixture.play(evaluator);
         assert!(result.score() > 0);
     }
 
     #[test]
     fn same_score_for_the_same_inputs() {
         let fixture = test_fixture();
-        let result1 = fixture.play(AiCoefficients::default());
-        let result2 = fixture.play(AiCoefficients::default());
+        let evaluator = ActionEvaluator::Linear(LinearCoefficients::default());
+        let result1 = fixture.play(evaluator);
+        let result2 = fixture.play(evaluator);
         assert_eq!(result1, result2);
     }
 }

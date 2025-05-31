@@ -1,26 +1,37 @@
 use std::cmp::Ordering;
 use itertools::Itertools;
 use crate::game::ai::apply_inputs::ApplyInputs;
-use crate::game::ai::board_cost::BoardCost;
+use crate::game::ai::action_evaluator::ActionEvaluator;
 use crate::game::ai::input_search::{InputSearch, InputSequenceResult};
 use crate::game::ai::input_sequence::InputSequence;
 use crate::game::{Game, GameState};
 use crate::game::ai::board_features::{BoardFeatures, StackStats};
+use crate::game::ai::linear::LinearCoefficients;
+use crate::game::ai::neural::{NeuralGenome, TetrisNeuralNetwork};
 use crate::game::board::Board;
 use crate::game::tetromino::TetrominoShape;
 
 pub struct AiAgent {
-    cost: BoardCost,
+    action_evaluate: ActionEvaluator,
     wait_for_alt: Option<InputSequence>,
     wait_for_spawn: bool,
     look_ahead: usize
 }
 
-impl AiAgent {
+const DEFAULT_LOOKAHEAD: usize = 0;
 
-    pub fn new(cost: BoardCost, look_ahead: usize) -> Self {
-        Self { cost, wait_for_alt: None, wait_for_spawn: true, look_ahead }
-}
+impl AiAgent {
+    pub fn new(action_evaluate: ActionEvaluator, look_ahead: usize) -> Self {
+        Self { action_evaluate, wait_for_alt: None, wait_for_spawn: true, look_ahead }
+    }
+    
+    pub fn default_linear() -> Self {
+        Self::new(ActionEvaluator::Linear(LinearCoefficients::default()), DEFAULT_LOOKAHEAD)
+    }
+    
+    pub fn default_neural() -> Self {
+        Self::new(ActionEvaluator::NeuralNetwork(TetrisNeuralNetwork::default()), DEFAULT_LOOKAHEAD)
+    }
 
     pub fn act(&mut self, game: &mut Game) {
         if let Some(next_move) = match game.state {
@@ -87,7 +98,7 @@ impl AiAgent {
         inputs
             .into_iter()
             // first order by the cost of the initial move
-            .map(|r| (r, self.cost.cost(&game.board, stack_stats_before, r.board())))
+            .map(|r| (r, self.action_evaluate.evaluate_action(&game.board, stack_stats_before, r.board())))
             .sorted_by(|m1, m2| self.compare_moves(m2, m1))
             
             // next look ahead and take the best result over the entire peek sequence
@@ -111,7 +122,7 @@ impl AiAgent {
                     None
                 } else {
                     // cost from the start to the end
-                    let score = self.cost.cost(&game.board, stack_stats_before, current_board);
+                    let score = self.action_evaluate.evaluate_action(&game.board, stack_stats_before, current_board);
                     Some((initial_move, score))
                 }
             })
@@ -123,7 +134,7 @@ impl AiAgent {
     fn best_single_move(&self, board_from: Board, stack_stats_before: StackStats, shape: TetrominoShape) -> Option<(InputSequenceResult, f64)> {
         board_from.search_all_inputs(shape)
             .into_iter()
-            .map(|r| (r, self.cost.cost(&board_from, stack_stats_before, r.board())))
+            .map(|r| (r, self.action_evaluate.evaluate_action(&board_from, stack_stats_before, r.board())))
             .max_by(|m1, m2| self.compare_moves(m1, m2))
     }
 
@@ -131,4 +142,10 @@ impl AiAgent {
         cost1.total_cmp(cost2).then_with(|| result1.inputs().cmp(&result2.inputs()))
     }
 
+}
+
+impl Default for AiAgent {
+    fn default() -> Self {
+        Self::default_neural()
+    }
 }

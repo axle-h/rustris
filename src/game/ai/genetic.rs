@@ -5,37 +5,46 @@ use std::time::Instant;
 use itertools::Itertools;
 use rayon::prelude::*;
 use crate::config::Config;
-use crate::game::ai::board_cost::{AiCoefficients, Genome};
+use crate::game::ai::action_evaluator::ActionEvaluator;
 use crate::game::ai::game_result::GameResult;
-use crate::game::ai::generation_stats::{GenerationResult, GenerationStatistics};
+use crate::game::ai::generation_stats::GenerationStatistics;
+use crate::game::ai::genome::Genome;
 use crate::game::ai::headless_game::{EndGame, HeadlessGameFixture, HeadlessGameOptions};
+use crate::game::ai::linear::LinearCoefficients;
 use crate::game::ai::mutation::{GenomeMutation, RateLimits};
+use crate::game::ai::neural::TetrisNeuralNetwork;
+use crate::game::ai::record::GenerationRecord;
 
-
-pub struct GeneticAlgorithm {
-    population: [Genome; POPULATION_SIZE],
-    generations: Vec<GenerationStatistics>,
+pub struct GeneticAlgorithm<const N: usize, F>
+where F : Fn(Genome<N>) -> ActionEvaluator
+{
+    population: [Genome<N>; POPULATION_SIZE],
+    generations: Vec<GenerationStatistics<N>>,
     fixture: HeadlessGameFixture,
-    mutation: GenomeMutation,
+    mutation: GenomeMutation<N>,
     elite_count: usize,
-    cached_scores: HashMap<Genome, GameResult>,
+    cached_scores: HashMap<Genome<N>, GameResult>,
     end_game: EndGame,
     max_generations: usize,
+    action_evaluator_factory: F,
 }
 
 const POPULATION_SIZE: usize = 200;
 
-impl GeneticAlgorithm {
+impl<const N: usize, F> GeneticAlgorithm<N, F>
+where F : Fn(Genome<N>) -> ActionEvaluator + Send + Sync
+{
     // TODO increase game length as games start to get longer
     pub fn new(
         fixture: HeadlessGameFixture,
         elite_count: usize,
-        mut mutation: GenomeMutation,
+        mut mutation: GenomeMutation<N>,
         end_game: EndGame,
         max_generations: usize,
-        population_seed: Option<AiCoefficients>
+        population_seed: Option<Genome<N>>,
+        action_evaluator_fn: F
     ) -> Self {
-        let genome_seed: Option<Genome> = population_seed.map(|seed| seed.into());
+        let genome_seed: Option<Genome<N>> = population_seed.map(|seed| seed.into());
         Self {
             population: array::from_fn(|_| {
                 if let Some(genome_seed) = genome_seed {
@@ -50,22 +59,29 @@ impl GeneticAlgorithm {
             elite_count,
             cached_scores: HashMap::new(),
             end_game,
-            max_generations
+            max_generations,
+            action_evaluator_factory: action_evaluator_fn
         }
     }
 
-    pub fn run(&mut self) -> GenerationStatistics {
+    pub fn run(&mut self) -> GenerationStatistics<N> {
+        println!("Running genetic algorithm...");
+        
+        let mut record = GenerationRecord::new().expect("Failed to create generation record");
+        println!("Results saved to {}", record.path().display());
+        
         let t0 = Instant::now();
         loop {
             let stats = self.evolve();
             println!("{}", stats);
+            record.add(&stats).expect("Failed to write to generation record");
             if stats.id() >= self.max_generations || self.end_game.is_end_game(stats.max().result(), Instant::now() - t0) {
                 return stats
             }
         }
     }
     
-    fn evolve(&mut self) -> GenerationStatistics {
+    fn evolve(&mut self) -> GenerationStatistics<N> {
         // Calculate fitness in parallel
         let mut population: Vec<_> = self.population
             .into_par_iter()
@@ -73,7 +89,7 @@ impl GeneticAlgorithm {
                 let result = if let Some(cached) = self.cached_scores.get(&genome) {
                     *cached
                 } else {
-                    self.fixture.play(genome.into())
+                    self.fixture.play((self.action_evaluator_factory)(genome))
                 };
                 (genome, result)
             })
@@ -114,7 +130,7 @@ impl GeneticAlgorithm {
         stats
     }
 
-    fn next_generation(&mut self, labelled_population: Vec<(Genome, GameResult)>) -> Vec<Genome> {
+    fn next_generation(&mut self, labelled_population: Vec<(Genome<N>, GameResult)>) -> Vec<Genome<N>> {
         // TODO use this same score for classification above
         let surviving_population: Vec<_> = labelled_population.into_iter()
             .map(|(genome, result)| {
@@ -186,7 +202,7 @@ impl PopulationCounts {
 }
 
 
-pub fn ga_main() -> Result<(), String> {
+pub fn ga_main_linear() -> Result<(), String> {
     let fixture = HeadlessGameFixture::new(
         Config::default(),
         vec![rand::random()],
@@ -199,15 +215,53 @@ pub fn ga_main() -> Result<(), String> {
         5,
         rand::random()
     );
-    GeneticAlgorithm::new(fixture, 2, mutation, EndGame::NONE, 10_000, Some(AiCoefficients::default())).run();
+    GeneticAlgorithm::new(
+        fixture,
+        2,
+        mutation,
+        EndGame::NONE,
+        10_000,
+        Some(LinearCoefficients::default().into()),
+        move |genome| ActionEvaluator::Linear(genome.into())
+    ).run();
     
     Ok(())
 }
 
+pub fn ga_main_neural() -> Result<(), String> {
+    let fixture = HeadlessGameFixture::new(
+        Config::default(),
+        vec![rand::random()],
+        HeadlessGameOptions::default(),
+        EndGame::of_lines(10_000) // TODO what is the world record?
+    );
+    let mutation = GenomeMutation::of_max(
+        RateLimits::new(0.1 ..= 0.20),
+        RateLimits::new(0.1 ..= 0.20),
+        5,
+        rand::random()
+    );
+    GeneticAlgorithm::new(
+        fixture,
+        2,
+        mutation,
+        EndGame::NONE,
+        10_000,
+        None, //Some(TetrisNeuralNetwork::default().into()),
+        move |genome| ActionEvaluator::NeuralNetwork(genome.into())
+    ).run();
+
+    Ok(())
+}
+
+pub fn ga_main() -> Result<(), String> {
+    ga_main_neural()
+}
+
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
     use crate::config::Config;
+    use crate::game::ai::action_evaluator::ActionEvaluator;
     use crate::game::ai::genetic::GeneticAlgorithm;
     use crate::game::ai::headless_game::{EndGame, HeadlessGameFixture, HeadlessGameOptions};
     use crate::game::ai::mutation::{GenomeMutation, RateLimits};
@@ -220,8 +274,16 @@ mod tests {
             HeadlessGameOptions::default(),
             EndGame::of_seconds(2)
         );
-        let mutation = GenomeMutation::of_max(RateLimits::default(), RateLimits::default(), 5, 100.into());
-        GeneticAlgorithm::new(fixture, 2, mutation, EndGame::NONE, 1, None).run();
+        let mutation: GenomeMutation<9> = GenomeMutation::of_max(RateLimits::default(), RateLimits::default(), 5, 100.into());
+        GeneticAlgorithm::new(
+            fixture,
+            2,
+            mutation,
+            EndGame::NONE,
+            1,
+            None,
+            move |genome| ActionEvaluator::Linear(genome.into())
+        ).run();
 
         assert!(true);
     }

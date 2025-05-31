@@ -3,9 +3,9 @@ use std::ops::RangeInclusive;
 use rand::{Rng, SeedableRng};
 use std::collections::VecDeque;
 use rand_chacha::ChaChaRng;
-use crate::game::ai::board_cost::{Genome, COEFFICIENTS_COUNT};
 use crate::game::ai::coefficient::{Coefficient, RANDOM_RAW_COEFFICIENT_DELTA_RANGE};
 use crate::game::ai::generation_stats::GenerationStatistics;
+use crate::game::ai::genome::Genome;
 use crate::game::random::Seed;
 
 #[derive(Debug, Clone)]
@@ -50,21 +50,21 @@ impl Default for RateLimits {
     }
 }
 
-pub struct GenomeMutation {
+pub struct GenomeMutation<const N: usize> {
     mutation_rate: RateLimits,
     crossover_rate: RateLimits,
     samples: VecDeque<f64>,
-    stat_fn: fn(GenerationStatistics) -> f64,
+    stat_fn: fn(GenerationStatistics<N>) -> f64,
     rng: ChaChaRng,
 }
 
-impl GenomeMutation {
+impl<const N: usize> GenomeMutation<N> {
     fn new(
         mutation_rate: RateLimits,
         crossover_rate: RateLimits,
         max_samples: usize,
         seed: Seed,
-        stat_fn: fn(GenerationStatistics) -> f64
+        stat_fn: fn(GenerationStatistics<N>) -> f64
     ) -> Self {
         Self { mutation_rate, crossover_rate, samples: VecDeque::with_capacity(max_samples), stat_fn, rng: seed.into() }
     }
@@ -88,7 +88,7 @@ impl GenomeMutation {
             crossover_rate,
             max_samples,
             seed,
-            |stats: GenerationStatistics| stats.median().result().score() as f64
+            |stats: GenerationStatistics<N>| stats.median().result().score() as f64
         )
     }
 
@@ -103,11 +103,11 @@ impl GenomeMutation {
             crossover_rate,
             max_samples,
             seed,
-            |stats: GenerationStatistics| stats.max().result().score() as f64
+            |stats: GenerationStatistics<N>| stats.max().result().score() as f64
         )
     }
 
-    pub fn add_sample(&mut self, stats: GenerationStatistics) {
+    pub fn add_sample(&mut self, stats: GenerationStatistics<N>) {
         let value = (self.stat_fn)(stats);
         if self.samples.len() >= self.samples.capacity() {
             self.samples.pop_front(); // Remove oldest sample if at capacity
@@ -133,25 +133,26 @@ impl GenomeMutation {
         }
     }
     
-    pub fn random(&mut self) -> Genome {
-        array::from_fn(|_| self.rng.random())
+    pub fn random(&mut self) -> Genome<N> {
+        let random_array: [f64; N] = array::from_fn(|_| self.rng.random());
+        random_array.into()
     }
     
-    pub fn mutate(&mut self, genome: Genome) -> Genome {
+    pub fn mutate(&mut self, genome: Genome<N>) -> Genome<N> {
         genome.map(|coefficient| {
             if self.mutation_rate.test(&mut self.rng) {
                 self.rng.mutate(coefficient)
             } else {
                 coefficient
             }
-        })
+        }).into()
     }
 
-    pub fn crossover(&mut self, genome1: Genome, genome2: Genome) -> [Genome; 2] {
-        let mut child1 = [Coefficient::ZERO; COEFFICIENTS_COUNT];
-        let mut child2 = [Coefficient::ZERO; COEFFICIENTS_COUNT];
+    pub fn crossover(&mut self, genome1: Genome<N>, genome2: Genome<N>) -> [Genome<N>; 2] {
+        let mut child1 = [Coefficient::ZERO; N];
+        let mut child2 = [Coefficient::ZERO; N];
 
-        for i in 0..COEFFICIENTS_COUNT {
+        for i in 0..N {
             if self.crossover_rate.test(&mut self.rng) {
                 child1[i] = genome2[i];
                 child2[i] = genome1[i];
@@ -161,12 +162,12 @@ impl GenomeMutation {
             }
         }
 
-        [self.mutate(child1), self.mutate(child2)]
+        [self.mutate(child1.into()), self.mutate(child2.into())]
     }
 
-    pub fn parents(&mut self, population: &[(Genome, f64)], count: usize) -> Vec<[Genome; 2]> {
+    pub fn parents(&mut self, population: &[(Genome<N>, f64)], count: usize) -> Vec<[Genome<N>; 2]> {
         let scaled_population = scale(&population);
-        let mut parents: Vec<[Genome; 2]> = vec![];
+        let mut parents: Vec<[Genome<N>; 2]> = vec![];
         for _ in 0..count {
             let mut next_parent = || {
                 let p: f64 = self.rng.random();
@@ -204,7 +205,7 @@ impl GenomeMutation {
     }
 }
 
-fn scale(population: &[(Genome, f64)]) -> Vec<(Genome, f64)> {
+fn scale<const N: usize>(population: &[(Genome<N>, f64)]) -> Vec<(Genome<N>, f64)> {
     // TODO maybe softmax might be better?
     let sum_fitness: f64 = population.iter()
         .map(|(_, fitness)| *fitness)
@@ -236,10 +237,12 @@ mod tests {
     use itertools::Itertools;
     use super::*;
 
+    const TEST_GENES: usize = 9;
+
     fn mutation<MR: Into<Option<RateLimits>>, CR : Into<Option<RateLimits>>>(
         mutation_rate: MR,
         crossover_rate: CR
-    ) -> GenomeMutation {
+    ) -> GenomeMutation<TEST_GENES> {
         GenomeMutation::of_max(
             mutation_rate.into().unwrap_or(RateLimits::default()),
             crossover_rate.into().unwrap_or(RateLimits::default()),
@@ -248,8 +251,8 @@ mod tests {
         )
     }
     
-    fn genome(i: i32) -> Genome {
-        [Coefficient::new(i as i64); COEFFICIENTS_COUNT]
+    fn genome(i: i32) -> Genome<TEST_GENES> {
+        [Coefficient::new(i as i64); TEST_GENES].into()
     }
     
     #[test]
@@ -265,7 +268,8 @@ mod tests {
 
         let counts: Vec<_> = parents.iter()
             .flatten()
-            .map(|[c0, ..]| *c0)
+            .map(|g| g.chromosome())
+            .map(|[c0, ..]| c0)
             .sorted()
             .dedup_with_count()
             .collect();

@@ -1,6 +1,5 @@
 use std::collections::{HashSet, VecDeque};
 use std::ops::Sub;
-use crate::game::block::BlockState;
 use crate::game::board::{compact_destroy_lines, Board, BOARD_HEIGHT, BOARD_WIDTH};
 use crate::game::geometry::Point;
 
@@ -50,6 +49,10 @@ impl StackStats {
 
     pub fn closed_holes(&self) -> i32 {
         self.closed_holes
+    }
+
+    pub fn holes(&self) -> i32 {
+        self.open_holes + self.closed_holes
     }
 
     pub fn max_height(&self) -> i32 {

@@ -1,7 +1,7 @@
 mod apply_inputs;
 mod input_search;
 mod input_sequence;
-pub mod board_cost;
+pub mod action_evaluator;
 mod board_features;
 pub mod agent;
 mod headless_game;
@@ -11,4 +11,8 @@ mod stats;
 mod mutation;
 mod generation_stats;
 mod coefficient;
+mod neural;
+mod genome;
+pub mod linear;
+mod record;
 

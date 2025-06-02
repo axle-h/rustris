@@ -83,46 +83,46 @@ pub struct HeadlessGameOptions {
     look_ahead: usize
 }
 
+pub const DEFAULT_LOOKAHEAD: usize = 0;
+
 impl Default for HeadlessGameOptions {
     fn default() -> Self {
         Self {
             step: Duration::from_millis(16), // 60hz
             line_clear_delay: SWEEP_DURATION,
-            look_ahead: 2
+            look_ahead: DEFAULT_LOOKAHEAD
         }   
     }
 }
 
 pub struct HeadlessGameFixture {
     config: Config,
-    seeds: Vec<Seed>,
+    seed: Seed,
     game_options: HeadlessGameOptions,
     end_game: EndGame,
 }
 
 impl HeadlessGameFixture {
-    pub fn new(config: Config, seeds: Vec<Seed>, game_options: HeadlessGameOptions, end_game: EndGame) -> Self {
-        Self { config, seeds, game_options, end_game }
+    pub fn new(config: Config, seed: Seed, game_options: HeadlessGameOptions, end_game: EndGame) -> Self {
+        Self { config, seed, game_options, end_game }
+    }
+    
+    pub fn next_seed(&mut self) {
+        self.seed += Seed::from(1);
+    }
+    
+    pub fn current_seed(&self) -> Seed {
+        self.seed
     }
     
     pub fn play(&self, action_evaluate: ActionEvaluator) -> GameResult {
-        let mut sum_result = GameResult::default();
-        for seed in self.seeds.iter() {
-            let rng = RandomTetromino::new(
-                self.config.game.random_mode,
-                self.config.game.min_garbage_per_hole,
-                *seed
-            );
-            let agent = AiAgent::new(action_evaluate, self.game_options.look_ahead);
-            let result = HeadlessGame::new(rng, agent, self.game_options, self.end_game).play();
-            sum_result += result;
-        }
-        
-        if self.seeds.len() > 1 {
-            sum_result / self.seeds.len()
-        } else {
-            sum_result
-        }
+        let rng = RandomTetromino::new(
+            self.config.game.random_mode,
+            self.config.game.min_garbage_per_hole,
+            self.seed
+        );
+        let agent = AiAgent::new(action_evaluate, self.game_options.look_ahead);
+        HeadlessGame::new(rng, agent, self.game_options, self.end_game).play()
     }
 }
 
@@ -181,7 +181,7 @@ mod tests {
     fn test_fixture() -> HeadlessGameFixture {
         HeadlessGameFixture::new(
             Config::default(),
-            vec![100.into(), 101.into()],
+            100.into(),
             HeadlessGameOptions::default(),
             EndGame::of_seconds(5)
         )

@@ -10,7 +10,7 @@ pub struct GameResult {
     lines: u32,
     level: u32,
     game_over: bool,
-    time: Duration
+    time: Duration,
 }
 
 impl Display for GameResult {

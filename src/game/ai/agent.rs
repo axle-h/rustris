@@ -6,6 +6,7 @@ use crate::game::ai::input_search::{InputSearch, InputSequenceResult};
 use crate::game::ai::input_sequence::InputSequence;
 use crate::game::{Game, GameState};
 use crate::game::ai::board_features::{BoardFeatures, StackStats};
+use crate::game::ai::headless_game::DEFAULT_LOOKAHEAD;
 use crate::game::ai::linear::LinearCoefficients;
 use crate::game::ai::neural::{NeuralGenome, TetrisNeuralNetwork};
 use crate::game::board::Board;
@@ -18,7 +19,7 @@ pub struct AiAgent {
     look_ahead: usize
 }
 
-const DEFAULT_LOOKAHEAD: usize = 0;
+
 
 impl AiAgent {
     pub fn new(action_evaluate: ActionEvaluator, look_ahead: usize) -> Self {

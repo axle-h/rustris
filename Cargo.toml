@@ -39,6 +39,8 @@ strum = { version = "0.27.1", features = ["derive"] }
 strum_macros = "0.27.1"
 rayon = "1.10.0"
 itertools = "0.14.0"
+num-bigint = "0.4.6"
+num-traits = "0.2.19"
 
 
 

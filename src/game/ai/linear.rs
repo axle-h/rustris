@@ -13,7 +13,6 @@ pub struct LinearCoefficients {
     tetris_clear: Coefficient,
     max_tetromino_y: Coefficient,
     pillars: Coefficient
-    // TODO rhs column height
 }
 
 impl Default for LinearCoefficients {

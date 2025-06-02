@@ -130,8 +130,7 @@ Algorithm:
 TODO
 
 * agent
-   * drop open holes, a hole is a hole
-   * allow one pillar
+   * open holes: fill by dropping normally
    * the lookahead doesnt seem to be doing anything useful given it's cost, drop it
 * MLP
    * Maybe the issue is that the fitness function is strictly linear

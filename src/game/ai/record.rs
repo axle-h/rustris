@@ -21,7 +21,7 @@ impl GenerationRecord {
         let mut record = Self { file, path };
 
         // Write CSV header
-        writeln!(record.file, "Generation,Score,Lines,Score P95,Lines P95,Score P50,Lines P50,Genome")?;
+        writeln!(record.file, "Generation,Score,Lines,Score P95,Lines P95,Score P50,Lines P50,Seed,Genome")?;
         Ok(record)
     }
     
@@ -32,7 +32,7 @@ impl GenerationRecord {
     pub fn add<const N: usize>(&mut self, stats: &GenerationStatistics<N>) -> io::Result<()> {
         writeln!(
             self.file,
-            "{},{},{},{},{},{},{},\"{}\"",
+            "{},{},{},{},{},{},{},\"{}\",\"{}\"",
             stats.id(),
             stats.max().result().score(),
             stats.max().result().lines(),
@@ -40,6 +40,7 @@ impl GenerationRecord {
             stats.p95().result().lines(),
             stats.median().result().score(),
             stats.median().result().lines(),
+            stats.seed(),
             stats.max().genome()
         )
     }

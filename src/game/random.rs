@@ -1,11 +1,14 @@
+use num_traits::Num;
 use super::tetromino::TetrominoShape;
 use crate::game::board::BOARD_WIDTH;
 use rand::prelude::*;
-use rand::seq::SliceRandom;
 use rand::{Rng};
 use rand_chacha::{ChaChaRng};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+use std::fmt::{Display, Formatter};
+use std::ops::{Add, AddAssign, Deref, DerefMut};
+use num_bigint::BigUint;
 use rand::distr::StandardUniform;
 
 pub const PEEK_SIZE: usize = 7;
@@ -26,6 +29,62 @@ fn rand_shape<R: Rng>(rng: &mut R) -> TetrominoShape {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Seed(<ChaChaRng as SeedableRng>::Seed);
 
+impl Deref for Seed {
+    type Target = <ChaChaRng as SeedableRng>::Seed;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Seed {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Display for Seed {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let bigint: BigUint = (*self).into();
+        write!(f, "{}", bigint)
+    }
+}
+
+impl Add for Seed {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        let mut result = self;
+        result += rhs;
+        result
+    }
+}
+
+impl AddAssign for Seed {
+    fn add_assign(&mut self, rhs: Self) {
+        let mut carry = 0u64;
+
+        // Process 8 bytes at a time using u64
+        for i in (0..32).step_by(8) {
+            let a = u64::from_le_bytes(self[i..i+8].try_into().unwrap());
+            let b = u64::from_le_bytes(rhs[i..i+8].try_into().unwrap());
+
+            // Add previous carry to first number
+            let sum = a.wrapping_add(b).wrapping_add(carry);
+
+            // Calculate new carry - if sum is less than either input (or equal to when carry is 1),
+            // we wrapped around and need to carry 1
+            carry = if (carry == 1 && sum <= a) || (carry == 0 && sum < a) {
+                1
+            } else {
+                0
+            };
+
+            self[i..i+8].copy_from_slice(&sum.to_le_bytes());
+        }
+    }
+}
+
 impl Default for Seed {
     fn default() -> Self {
         Self(Default::default())
@@ -41,16 +100,39 @@ impl Distribution<Seed> for StandardUniform {
 impl From<u128> for Seed {
     fn from(value: u128) -> Self {
         let mut seed = Seed::default();
-        seed.0[..16].copy_from_slice(&value.to_le_bytes());
+        seed[..16].copy_from_slice(&value.to_le_bytes());
         seed
-    }   
+    }
+}
+
+impl From<BigUint> for Seed {
+    fn from(value: BigUint) -> Self {
+        let mut bytes = value.to_bytes_be();
+        // pad to 32 bytes
+        while bytes.len() < 32 {
+            bytes.insert(0, 0);
+        }
+        Self(bytes.try_into().expect("expecting a 256 bit number"))
+    }
+}
+
+impl Into<BigUint> for Seed {
+    fn into(self) -> BigUint {
+        BigUint::from_bytes_be(&*self)
+    }
 }
 
 impl From<i32> for Seed {
     fn from(value: i32) -> Self {
         let mut seed = Seed::default();
-        seed.0[..4].copy_from_slice(&value.to_le_bytes());
+        seed[..4].copy_from_slice(&value.to_le_bytes());
         seed
+    }
+}
+
+impl From<String> for Seed {
+    fn from(value: String) -> Self {
+        BigUint::from_str_radix(&value, 10).expect("not a valid seed string").into()
     }
 }
 
@@ -247,5 +329,27 @@ mod tests {
         let mut random = RandomMode::True.build(1, 1).pop().unwrap();
         let observed: [u32; 100] = next_n_holes(&mut random, 100).try_into().unwrap();
         assert!(HashSet::from(observed).len() > 1);
+    }
+    
+    #[test]
+    fn sum_seed() {
+        let seed1 = Seed::from(999999999999999999999999999u128);
+        let seed2 = Seed::from(1);
+        let seed3 = seed1 + seed2;
+        assert_eq!(seed3, Seed::from(1000000000000000000000000000u128));
+    }
+    
+    #[test]
+    fn serialize_seed() {
+        let bigint = BigUint::parse_bytes(b"111000000000000000000000000000000000000222", 10).unwrap();
+        let result: BigUint = Seed::from(bigint.clone()).into(); 
+        assert_eq!(result, bigint);
+    }
+
+    #[test]
+    fn display_seed() {
+        let bigint = BigUint::parse_bytes(b"34028236692093846346337460743176821145500000000000000000000000000000000000000", 10).unwrap();
+        let result = format!("{}", Seed::from(bigint.clone()));
+        assert_eq!(result, "34028236692093846346337460743176821145500000000000000000000000000000000000000");
     }
 }

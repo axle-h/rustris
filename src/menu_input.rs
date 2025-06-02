@@ -34,6 +34,7 @@ impl MenuInputContext {
             let maybe_key = match event {
                 Event::KeyDown {
                     keycode: Some(keycode),
+                    repeat: false, // disable repeat processing as it seems broken sometimes, maybe it's an sdl2-compat thing?
                     ..
                 } => self.mapping.get(&keycode).copied(),
                 Event::Quit { .. } => Some(MenuInputKey::Quit),

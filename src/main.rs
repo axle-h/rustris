@@ -104,7 +104,7 @@ struct TetrisSdl {
 impl TetrisSdl {
     pub fn new() -> Result<Self, String> {
         let config = Config::load()?;
-        let sdl = sdl2::init()?;
+        let sdl = sdl2::init()?;        
         let image = sdl2::image::init(ImageInitFlag::PNG)?;
         let video = sdl.video()?;
         let ttf = sdl2::ttf::init().map_err(|e| e.to_string())?;

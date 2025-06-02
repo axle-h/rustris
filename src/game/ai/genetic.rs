@@ -1,211 +1,199 @@
-use std::array;
-use std::collections::{HashMap, HashSet};
-use std::ops::{Add, Div};
+use std::fmt::Display;
 use std::time::Instant;
-use itertools::Itertools;
 use rayon::prelude::*;
 use crate::config::Config;
 use crate::game::ai::action_evaluator::ActionEvaluator;
-use crate::game::ai::game_result::GameResult;
-use crate::game::ai::generation_stats::GenerationStatistics;
+use crate::game::ai::generation_stats::{GenerationStatistics, Organism};
 use crate::game::ai::genome::Genome;
 use crate::game::ai::headless_game::{EndGame, HeadlessGameFixture, HeadlessGameOptions};
 use crate::game::ai::linear::LinearCoefficients;
 use crate::game::ai::mutation::{GenomeMutation, RateLimits};
-use crate::game::ai::neural::TetrisNeuralNetwork;
 use crate::game::ai::record::GenerationRecord;
 
-pub struct GeneticAlgorithm<const N: usize, F>
-where F : Fn(Genome<N>) -> ActionEvaluator
-{
-    population: [Genome<N>; POPULATION_SIZE],
-    generations: Vec<GenerationStatistics<N>>,
-    fixture: HeadlessGameFixture,
-    mutation: GenomeMutation<N>,
-    elite_count: usize,
-    cached_scores: HashMap<Genome<N>, GameResult>,
+#[derive(Debug, Clone, Copy)]
+pub struct HyperParameters {
+    population_size: usize,
+    elite_count: usize, // elites are passed onto the next generation unchanged
+    survivor_count: usize, // only survivors are selected to breed
+    parent_count: usize, // the number of breeding pairs each generation, the parents are selected from the surviving population weighted by fitness
     end_game: EndGame,
     max_generations: usize,
+    generations_per_seed: usize,
+}
+
+impl HyperParameters {
+    pub fn new(population_size: usize, elite_rate: f64, survival_rate: f64, end_game: EndGame, max_generations: usize, generations_per_seed: usize) -> Self {
+        fn rate_to_count(population_size: usize, rate: f64) -> usize {
+            assert!(rate >= 0.0 && rate <= 1.0, "rates must be between 0.0 and 1.0");
+            (population_size as f64 * rate) as usize
+        }
+
+        let elite_count = rate_to_count(population_size, elite_rate);
+        let survivor_count = rate_to_count(population_size, survival_rate);
+
+        assert!(elite_count + survivor_count < population_size, "too many elites and survivors");
+
+        Self {
+            population_size,
+            elite_count,
+            survivor_count: rate_to_count(population_size, survival_rate),
+            parent_count: ((population_size as f64 - elite_count as f64) / 2.0).ceil() as usize,
+            end_game,
+            max_generations,
+            generations_per_seed
+        }
+    }
+}
+
+impl Default for HyperParameters {
+    fn default() -> Self {
+        Self::new(
+            500,
+            0.02,
+            0.5,
+            EndGame::NONE,
+            usize::MAX,
+            100
+        )
+    }
+}
+
+pub struct GeneticAlgorithm<const GENOME: usize, F>
+where F : Fn(&Genome<GENOME>) -> ActionEvaluator
+{
+    population: Vec<Organism<GENOME>>,
+    generations: Vec<GenerationStatistics<GENOME>>,
+    fixture: HeadlessGameFixture,
+    mutation: GenomeMutation<GENOME>,
+    hyper_parameters: HyperParameters,
     action_evaluator_factory: F,
 }
 
-const POPULATION_SIZE: usize = 200;
-
 impl<const N: usize, F> GeneticAlgorithm<N, F>
-where F : Fn(Genome<N>) -> ActionEvaluator + Send + Sync
+where F : Fn(&Genome<N>) -> ActionEvaluator + Send + Sync
 {
-    // TODO increase game length as games start to get longer
     pub fn new(
         fixture: HeadlessGameFixture,
-        elite_count: usize,
         mut mutation: GenomeMutation<N>,
-        end_game: EndGame,
-        max_generations: usize,
+        hyper_parameters: HyperParameters,
         population_seed: Option<Genome<N>>,
         action_evaluator_fn: F
     ) -> Self {
         let genome_seed: Option<Genome<N>> = population_seed.map(|seed| seed.into());
+        let mut population = Vec::with_capacity(hyper_parameters.population_size);
+        for _ in 0 .. hyper_parameters.population_size {
+            let genome = if let Some(genome_seed) = genome_seed {
+                mutation.mutate(genome_seed)
+            } else {
+                mutation.random()
+            };
+            population.push(Organism::new(genome));
+        }
+
         Self {
-            population: array::from_fn(|_| {
-                if let Some(genome_seed) = genome_seed {
-                    mutation.mutate(genome_seed)
-                } else {
-                    mutation.random()
-                }
-            }),
+            population,
             generations: vec![],
             fixture,
             mutation,
-            elite_count,
-            cached_scores: HashMap::new(),
-            end_game,
-            max_generations,
+            hyper_parameters,
             action_evaluator_factory: action_evaluator_fn
         }
     }
 
     pub fn run(&mut self) -> GenerationStatistics<N> {
         println!("Running genetic algorithm...");
-        
+
+        let mut generations_until_next_seed = self.hyper_parameters.generations_per_seed;
         let mut record = GenerationRecord::new().expect("Failed to create generation record");
         println!("Results saved to {}", record.path().display());
-        
+
         let t0 = Instant::now();
         loop {
             let stats = self.evolve();
             println!("{}", stats);
             record.add(&stats).expect("Failed to write to generation record");
-            if stats.id() >= self.max_generations || self.end_game.is_end_game(stats.max().result(), Instant::now() - t0) {
+            if stats.id() >= self.hyper_parameters.max_generations || self.hyper_parameters.end_game.is_end_game(stats.max().result(), Instant::now() - t0) {
                 return stats
+            }
+
+            if generations_until_next_seed == 0 {
+                generations_until_next_seed = self.hyper_parameters.generations_per_seed;
+                self.fixture.next_seed();
+                println!("Using new seed {}", self.fixture.current_seed())
+            } else {
+                generations_until_next_seed -= 1;
             }
         }
     }
     
     fn evolve(&mut self) -> GenerationStatistics<N> {
         // Calculate fitness in parallel
-        let mut population: Vec<_> = self.population
-            .into_par_iter()
-            .map(|genome| {
-                let result = if let Some(cached) = self.cached_scores.get(&genome) {
-                    *cached
-                } else {
-                    self.fixture.play((self.action_evaluator_factory)(genome))
-                };
-                (genome, result)
-            })
-            .collect();
+        self.population
+            .par_iter_mut()
+            .for_each(|member| {
+                member.set_result(|genome| self.fixture.play((self.action_evaluator_factory)(genome)));
+            });
+        self.population.sort_by(|s1, s2| s2.result().cmp(&s1.result()));
 
-        // update cache in sync
-        for (genome, result) in population.iter().copied() {
-            self.cached_scores.insert(genome, result);
-        }
-
-        population.sort_by(|(_, s1), (_, s2)| s2.cmp(s1));
-
-        // let coefficient_diversity_sample: Vec<FlatCostCoefficients> = self.population.iter()
-        //     .take(self.diversity_sample_size)
-        //     .map(|&p| p.into())
-        //     .collect();
-        // let mean_coefficient_std_dev = (0 .. COEFFICIENTS_COUNT).map(|index|
-        //     coefficient_diversity_sample.iter()
-        //         .map(|coefficients| coefficients[index])
-        //         .collect::<Vec<f64>>()
-        //         .std_dev()
-        // ).collect::<Vec<f64>>().into_iter().sum::<f64>() / COEFFICIENTS_COUNT as f64;
-
-        let p95_index = (population.len() as f64 * 0.05).floor() as usize;
+        let p95_index = (self.hyper_parameters.population_size as f64 * 0.05).floor() as usize;
+        let p50_index = self.hyper_parameters.population_size / 2;
         let stats = GenerationStatistics::new(
             self.generations.len() + 1,
-            population[0].into(),
-            population[p95_index].into(),
-            population[population.len() / 2].into(),
+            self.fixture.current_seed(),
+            self.population[0],
+            self.population[p95_index],
+            self.population[p50_index],
             self.mutation.current_mutation_rate(),
             self.mutation.current_crossover_rate()
         );
         self.generations.push(stats);
         self.mutation.add_sample(stats);
-        
-        self.population = self.next_generation(population).try_into().unwrap();
+
+        self.next_generation();
 
         stats
     }
 
-    fn next_generation(&mut self, labelled_population: Vec<(Genome<N>, GameResult)>) -> Vec<Genome<N>> {
-        // TODO use this same score for classification above
-        let surviving_population: Vec<_> = labelled_population.into_iter()
-            .map(|(genome, result)| {
-                let game_over_penalty = if result.game_over() { 100_000.0 } else { 0.0 };
-                let fitness = result.score() as f64 - game_over_penalty;
-                (genome, fitness)
-            })
-            .sorted_by(|(_, f1), (_, f2)| f2.partial_cmp(f1).unwrap())
-            .take(POPULATION_SIZE / 2) // TODO configurable survival rate
+    fn next_generation(&mut self) {
+        let surviving_population: Vec<_> = self.population.iter()
+            .take(self.hyper_parameters.survivor_count)
+            .copied()
             .collect();
 
-        let children_count = ((POPULATION_SIZE as f64 - self.elite_count as f64) / 2.0).ceil() as usize; // TODO pre-calculate this
-        let parents = self.mutation.parents(&surviving_population, children_count);
-        
-        let mut next_population: HashSet<_> = parents.iter()
-            .flat_map(|[parent1, parent2]| self.mutation.crossover(*parent1, *parent2))
-            .collect();
+        self.population.clear();
 
-        for (elite, _) in surviving_population.iter().take(self.elite_count).copied() {
-            next_population.insert(elite);
+        for elite in surviving_population.iter().take(self.hyper_parameters.elite_count) {
+            // includes cached result
+            self.population.push(*elite);
         }
-        
-        // ensure we have enough unique children
-        while next_population.len() < POPULATION_SIZE {
+
+        let parents = self.mutation.parents(&surviving_population, self.hyper_parameters.parent_count);
+
+        let mut required_children = self.hyper_parameters.population_size - self.population.len();
+        while required_children > 0 {
             for [parent1, parent2] in parents.iter() {
-                let [child1, child2] = self.mutation.crossover(*parent1, *parent2);
-                next_population.insert(child1);
-                next_population.insert(child2);
-                
-                if next_population.len() >= POPULATION_SIZE {
-                    break
+                let [child1, child2] = self.mutation.crossover(*parent1, *parent2)
+                    .map(Organism::new);
+                self.population.push(child1);
+                required_children -= 1;
+
+                if required_children > 0 {
+                    self.population.push(child2);
+                    required_children -= 1;
+                }
+
+                if required_children == 0 {
+                    break;
                 }
             }
         }
-
-        next_population.into_iter().take(POPULATION_SIZE).collect()
     }
 }
-
-#[derive(Debug, Copy, Clone)]
-struct PopulationCounts {
-    elite: usize,
-    mutate: usize,
-    breed: usize,
-}
-
-impl PopulationCounts {
-    fn from_ratios(elite_ratio: f64, mutate_ratio: f64, breed_ratio: f64) -> Result<Self, String> {
-        let size_f64 = POPULATION_SIZE as f64;
-        let elite_count = (size_f64 * elite_ratio).ceil().clamp(0.0, size_f64) as usize;
-        let mutation_count = (size_f64 * mutate_ratio).ceil().clamp(0.0, size_f64) as usize;
-        let breed_count = (size_f64 * breed_ratio).ceil().clamp(0.0, size_f64) as usize;
-
-        let total_count = elite_count + mutation_count + breed_count;
-
-        if total_count > POPULATION_SIZE {
-            return Err(format!(
-                "Total population counts ({}) exceeds population size ({})",
-                total_count, POPULATION_SIZE
-            ));
-        }
-
-        Ok(Self {
-            elite: elite_count,
-            mutate: mutation_count,
-            breed: breed_count,
-        })
-    }
-}
-
 
 pub fn ga_main_linear() -> Result<(), String> {
     let fixture = HeadlessGameFixture::new(
         Config::default(),
-        vec![rand::random()],
+        rand::random(),
         HeadlessGameOptions::default(),
         EndGame::of_lines(10_000) // TODO what is the world record?
     );
@@ -217,12 +205,10 @@ pub fn ga_main_linear() -> Result<(), String> {
     );
     GeneticAlgorithm::new(
         fixture,
-        2,
         mutation,
-        EndGame::NONE,
-        10_000,
+        HyperParameters::default(),
         Some(LinearCoefficients::default().into()),
-        move |genome| ActionEvaluator::Linear(genome.into())
+        move |&genome| ActionEvaluator::Linear(genome.into())
     ).run();
     
     Ok(())
@@ -231,7 +217,7 @@ pub fn ga_main_linear() -> Result<(), String> {
 pub fn ga_main_neural() -> Result<(), String> {
     let fixture = HeadlessGameFixture::new(
         Config::default(),
-        vec![rand::random()],
+        rand::random(),
         HeadlessGameOptions::default(),
         EndGame::of_lines(10_000) // TODO what is the world record?
     );
@@ -243,12 +229,10 @@ pub fn ga_main_neural() -> Result<(), String> {
     );
     GeneticAlgorithm::new(
         fixture,
-        2,
         mutation,
-        EndGame::NONE,
-        10_000,
+        HyperParameters::default(),
         None, //Some(TetrisNeuralNetwork::default().into()),
-        move |genome| ActionEvaluator::NeuralNetwork(genome.into())
+        move |&genome| ActionEvaluator::NeuralNetwork(genome.into())
     ).run();
 
     Ok(())
@@ -262,7 +246,7 @@ pub fn ga_main() -> Result<(), String> {
 mod tests {
     use crate::config::Config;
     use crate::game::ai::action_evaluator::ActionEvaluator;
-    use crate::game::ai::genetic::GeneticAlgorithm;
+    use crate::game::ai::genetic::{GeneticAlgorithm, HyperParameters};
     use crate::game::ai::headless_game::{EndGame, HeadlessGameFixture, HeadlessGameOptions};
     use crate::game::ai::mutation::{GenomeMutation, RateLimits};
 
@@ -270,19 +254,24 @@ mod tests {
     fn genetic_algorithm() {
         let fixture = HeadlessGameFixture::new(
             Config::default(),
-            vec![100.into()],
+            100.into(),
             HeadlessGameOptions::default(),
             EndGame::of_seconds(2)
         );
         let mutation: GenomeMutation<9> = GenomeMutation::of_max(RateLimits::default(), RateLimits::default(), 5, 100.into());
         GeneticAlgorithm::new(
             fixture,
-            2,
             mutation,
-            EndGame::NONE,
-            1,
+            HyperParameters::new(
+                10,
+                0.01,
+                0.5,
+                EndGame::NONE,
+                1,
+                100
+            ),
             None,
-            move |genome| ActionEvaluator::Linear(genome.into())
+            move |&genome| ActionEvaluator::Linear(genome.into())
         ).run();
 
         assert!(true);

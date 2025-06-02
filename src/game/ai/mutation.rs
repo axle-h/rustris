@@ -4,7 +4,7 @@ use rand::{Rng, SeedableRng};
 use std::collections::VecDeque;
 use rand_chacha::ChaChaRng;
 use crate::game::ai::coefficient::{Coefficient, RANDOM_RAW_COEFFICIENT_DELTA_RANGE};
-use crate::game::ai::generation_stats::GenerationStatistics;
+use crate::game::ai::generation_stats::{GenerationStatistics, Organism};
 use crate::game::ai::genome::Genome;
 use crate::game::random::Seed;
 
@@ -50,11 +50,11 @@ impl Default for RateLimits {
     }
 }
 
-pub struct GenomeMutation<const N: usize> {
+pub struct GenomeMutation<const GENOME: usize> {
     mutation_rate: RateLimits,
     crossover_rate: RateLimits,
     samples: VecDeque<f64>,
-    stat_fn: fn(GenerationStatistics<N>) -> f64,
+    stat_fn: fn(GenerationStatistics<GENOME>) -> f64,
     rng: ChaChaRng,
 }
 
@@ -165,8 +165,8 @@ impl<const N: usize> GenomeMutation<N> {
         [self.mutate(child1.into()), self.mutate(child2.into())]
     }
 
-    pub fn parents(&mut self, population: &[(Genome<N>, f64)], count: usize) -> Vec<[Genome<N>; 2]> {
-        let scaled_population = scale(&population);
+    pub fn parents(&mut self, population: &[Organism<N>], count: usize) -> Vec<[Genome<N>; 2]> {
+        let scaled_population = scale_fitness(&population);
         let mut parents: Vec<[Genome<N>; 2]> = vec![];
         for _ in 0..count {
             let mut next_parent = || {
@@ -205,13 +205,12 @@ impl<const N: usize> GenomeMutation<N> {
     }
 }
 
-fn scale<const N: usize>(population: &[(Genome<N>, f64)]) -> Vec<(Genome<N>, f64)> {
-    // TODO maybe softmax might be better?
+fn scale_fitness<const N: usize>(population: &[Organism<N>]) -> Vec<(Genome<N>, f64)> {
     let sum_fitness: f64 = population.iter()
-        .map(|(_, fitness)| *fitness)
+        .map(|result| result.fitness())
         .sum();
 
-    population.into_iter().map(|(genome, fitness)| (*genome, fitness / sum_fitness)).collect()
+    population.into_iter().map(|result| (result.genome(), result.fitness() / sum_fitness)).collect()
 }
 
 trait RngMutation {
@@ -234,7 +233,9 @@ impl<R: Rng + ?Sized> RngMutation for R {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
     use itertools::Itertools;
+    use crate::game::ai::game_result::GameResult;
     use super::*;
 
     const TEST_GENES: usize = 9;
@@ -260,7 +261,16 @@ mod tests {
         const N: usize = 100;
         let population: Vec<_> = (0 .. N as i32).map(|i| {
             let fitness = 0.5f64.powi(i); // 1.0, 0.5, 0.25, 0.125 etc
-            (genome(i + 1), fitness)
+            let mut member = Organism::new(genome(i + 1));
+            let mut result = GameResult::new(
+                (fitness * 1_000_000.0) as u32,
+                10,
+                1,
+                true,
+                Duration::from_millis(100)
+            );
+            member.set_result(|_| result);
+            member
         }).collect();
         let parents = mutation(None, None).parents(&population, N / 2);
 

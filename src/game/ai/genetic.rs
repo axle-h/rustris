@@ -3,11 +3,12 @@ use std::time::Instant;
 use rayon::prelude::*;
 use crate::config::Config;
 use crate::game::ai::action_evaluator::ActionEvaluator;
-use crate::game::ai::generation_stats::{GenerationStatistics, Organism};
+use crate::game::ai::generation_stats::GenerationStatistics;
 use crate::game::ai::genome::Genome;
 use crate::game::ai::headless_game::{EndGame, HeadlessGameFixture, HeadlessGameOptions};
 use crate::game::ai::linear::LinearCoefficients;
 use crate::game::ai::mutation::{GenomeMutation, RateLimits};
+use crate::game::ai::organism::Organism;
 use crate::game::ai::record::GenerationRecord;
 
 #[derive(Debug, Clone, Copy)]
@@ -103,7 +104,6 @@ where F : Fn(&Genome<N>) -> ActionEvaluator + Send + Sync
     pub fn run(&mut self) -> GenerationStatistics<N> {
         println!("Running genetic algorithm...");
 
-        let mut generations_until_next_seed = self.hyper_parameters.generations_per_seed;
         let mut record = GenerationRecord::new().expect("Failed to create generation record");
         println!("Results saved to {}", record.path().display());
 
@@ -112,16 +112,17 @@ where F : Fn(&Genome<N>) -> ActionEvaluator + Send + Sync
             let stats = self.evolve();
             println!("{}", stats);
             record.add(&stats).expect("Failed to write to generation record");
-            if stats.id() >= self.hyper_parameters.max_generations || self.hyper_parameters.end_game.is_end_game(stats.max().result(), Instant::now() - t0) {
+            
+            let id = stats.id();
+            if id >= self.hyper_parameters.max_generations ||
+                self.hyper_parameters.end_game.is_end_game(stats.max().result(), Instant::now() - t0) {
                 return stats
             }
 
-            if generations_until_next_seed == 0 {
-                generations_until_next_seed = self.hyper_parameters.generations_per_seed;
+            if id % self.hyper_parameters.generations_per_seed == 0 {
                 self.fixture.next_seed();
+                self.population.iter_mut().for_each(Organism::unset_result);
                 println!("Using new seed {}", self.fixture.current_seed())
-            } else {
-                generations_until_next_seed -= 1;
             }
         }
     }

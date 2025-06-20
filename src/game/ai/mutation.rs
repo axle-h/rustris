@@ -4,8 +4,9 @@ use rand::{Rng, SeedableRng};
 use std::collections::VecDeque;
 use rand_chacha::ChaChaRng;
 use crate::game::ai::coefficient::{Coefficient, RANDOM_RAW_COEFFICIENT_DELTA_RANGE};
-use crate::game::ai::generation_stats::{GenerationStatistics, Organism};
+use crate::game::ai::generation_stats::GenerationStatistics;
 use crate::game::ai::genome::Genome;
+use crate::game::ai::organism::Organism;
 use crate::game::random::Seed;
 
 #[derive(Debug, Clone)]

@@ -14,4 +14,5 @@ mod neural;
 mod genome;
 pub mod linear;
 mod record;
+mod organism;
 

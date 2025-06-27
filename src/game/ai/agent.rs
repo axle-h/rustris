@@ -16,14 +16,13 @@ pub struct AiAgent {
     action_evaluate: ActionEvaluator,
     wait_for_alt: Option<InputSequence>,
     wait_for_spawn: bool,
+    wait_for_soft_drop: Option<InputSequence>,
     look_ahead: usize
 }
 
-
-
 impl AiAgent {
     pub fn new(action_evaluate: ActionEvaluator, look_ahead: usize) -> Self {
-        Self { action_evaluate, wait_for_alt: None, wait_for_spawn: true, look_ahead }
+        Self { action_evaluate, wait_for_alt: None, wait_for_spawn: true, wait_for_soft_drop: None, look_ahead }
     }
     
     pub fn default_linear() -> Self {
@@ -35,17 +34,27 @@ impl AiAgent {
     }
 
     pub fn act(&mut self, game: &mut Game) {
-        if let Some(next_move) = match game.state {
+        let next_move = match game.state {
             GameState::Spawn(_, _) => {
                 self.wait_for_spawn = false;
+                self.wait_for_soft_drop = None;
                 None
             }
             GameState::Fall(_) if self.wait_for_spawn => {
-                let _ = game.hard_drop() || game.set_soft_drop(true);
+                let _ = game.hard_drop();
                 None
             }
+            GameState::Fall(_) if self.wait_for_soft_drop.is_some() => {
+                game.set_soft_drop(true);
+                None
+            }
+            GameState::Lock(_) if self.wait_for_soft_drop.is_some() => {
+                let result = self.wait_for_soft_drop.clone();
+                self.wait_for_soft_drop = None;
+                result
+            }
             GameState::Fall(_) if self.wait_for_alt.is_some() => {
-                let alt = self.wait_for_alt;
+                let alt = self.wait_for_alt.clone();
                 self.wait_for_alt = None;
                 alt
             }
@@ -78,68 +87,73 @@ impl AiAgent {
                 }
             }
             _ => None
-        } {
-            game.apply_inputs(next_move);
-            game.hard_drop();
-            self.wait_for_spawn = true;
+        };
+
+        if let Some(next_move) = next_move {
+            self.wait_for_soft_drop = next_move.after_soft_drop();
+            if self.wait_for_soft_drop.is_none() {
+                self.wait_for_spawn = true;           
+            }
+            game.apply_inputs(&next_move);
         }
     }
     
     fn best_move(&self, game: &Game, shape: TetrominoShape, peek: &[TetrominoShape]) -> Option<(InputSequence, f64)> {
-        let stack_stats_before = game.board.stack_stats();
-        
-        if peek.is_empty() || self.look_ahead == 0 {
-            return self.best_single_move(game.board, game.board.stack_stats(), shape)
-                .map(|(result, cost)| (result.inputs(), cost));
-        }
-        
-        let inputs = game.board.search_all_inputs(shape);
-        let input_len = inputs.len();
+        self.best_single_move(game.board, game.board.stack_stats(), shape)
+            .map(|(result, cost)| (result.inputs().clone(), cost))
 
-        inputs
-            .into_iter()
-            // first order by the cost of the initial move
-            .map(|r| (r, self.action_evaluate.evaluate_action(&game.board, stack_stats_before, r.board())))
-            .sorted_by(|m1, m2| self.compare_moves(m2, m1))
-            
-            // next look ahead and take the best result over the entire peek sequence
-            .take(input_len / 2) // for performance, prune the search space to the top 50th percentile, TODO configurable
-            .filter_map(|(initial_move, _)| {
-                let mut current_board = initial_move.board();
-                let mut bad_sequence = false;
-
-                // Try each piece in the peek sequence
-                for &next_shape in peek.iter().take(self.look_ahead) {
-                    // TODO could use the held tetromino here
-                    if let Some((next_result, _)) = self.best_single_move(current_board, current_board.stack_stats(), next_shape) {
-                        current_board = next_result.board();
-                    } else {
-                        bad_sequence = true;
-                        break;
-                    }
-                }
-                
-                if bad_sequence {
-                    None
-                } else {
-                    // cost from the start to the end
-                    let score = self.action_evaluate.evaluate_action(&game.board, stack_stats_before, current_board);
-                    Some((initial_move, score))
-                }
-            })
-            .max_by(|m1, m2| self.compare_moves(m1, m2))
-            .map(|(result, score)| (result.inputs(), score))
+        // let stack_stats_before = game.board.stack_stats();
+        // let inputs = game.board.search_all_inputs(shape);
+        // let input_len = inputs.len();
+        //
+        // inputs
+        //     .into_iter()
+        //     // first order by the cost of the initial move
+        //     .map(|r| (r, self.action_evaluate.evaluate_action(&game.board, stack_stats_before, r.board())))
+        //     .sorted_by(|m1, m2| self.compare_moves(m2, m1))
+        //
+        //     // next look ahead and take the best result over the entire peek sequence
+        //     .take(input_len / 2) // for performance, prune the search space to the top 50th percentile, TODO configurable
+        //     .filter_map(|(initial_move, _)| {
+        //         let mut current_board = initial_move.board();
+        //         let mut bad_sequence = false;
+        //
+        //         // Try each piece in the peek sequence
+        //         for &next_shape in peek.iter().take(self.look_ahead) {
+        //             // TODO could use the held tetromino here
+        //             if let Some((next_result, _)) = self.best_single_move(current_board, current_board.stack_stats(), next_shape) {
+        //                 current_board = next_result.board();
+        //             } else {
+        //                 bad_sequence = true;
+        //                 break;
+        //             }
+        //         }
+        //
+        //         if bad_sequence {
+        //             None
+        //         } else {
+        //             // cost from the start to the end
+        //             let score = self.action_evaluate.evaluate_action(&game.board, stack_stats_before, current_board);
+        //             Some((initial_move, score))
+        //         }
+        //     })
+        //     .max_by(|m1, m2| self.compare_moves(m1, m2))
+        //     .map(|(result, score)| (result.inputs(), score))
     }
 
 
     fn best_single_move(&self, board_from: Board, stack_stats_before: StackStats, shape: TetrominoShape) -> Option<(InputSequenceResult, f64)> {
         board_from.search_all_inputs(shape)
             .into_iter()
-            .map(|r| (r, self.action_evaluate.evaluate_action(&board_from, stack_stats_before, r.board())))
+            .map(|r| {
+                let score = self.action_evaluate.evaluate_action(&board_from, stack_stats_before, r.board());
+                (r, score)
+            })
             .max_by(|m1, m2| self.compare_moves(m1, m2))
     }
 
     fn compare_moves(&self, (result1, cost1): &(InputSequenceResult, f64), (result2, cost2): &(InputSequenceResult, f64)) -> Ordering {
+        // if multiple moves have teh same score then we must order them to deterministically choose
         cost1.total_cmp(cost2).then_with(|| result1.inputs().cmp(&result2.inputs()))
     }
 

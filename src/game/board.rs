@@ -432,12 +432,12 @@ impl Board {
 
     pub fn stack_height(&self) -> u32 {
         let mut height = 0;
-        for y in 0..TOTAL_HEIGHT {
-            let row = self.row(y);
-            if row.iter().any(|b| b.is_stack() || b.is_tetromino()) {
-                height = y + 1
-            } else {
-                break
+        for x in 0..BOARD_WIDTH as i32 {
+            for y in (0..BOARD_HEIGHT as i32).rev() {
+                if !self.block((x, y)).is_empty() {
+                    height = height.max(y as u32 + 1);
+                    break;
+                }
             }
         }
         height
@@ -1013,6 +1013,14 @@ mod tests {
     fn stack_height_2() {
         let mut board = Board::new();
         having_stack_at(&mut board, 1, 0);
+        having_stack_at(&mut board, 1, 1);
+        assert_eq!(board.stack_height(), 2);
+    }
+
+
+    #[test]
+    fn stack_height_with_floating_block() {
+        let mut board = Board::new();
         having_stack_at(&mut board, 1, 1);
         assert_eq!(board.stack_height(), 2);
     }

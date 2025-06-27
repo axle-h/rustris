@@ -106,18 +106,12 @@ impl Default for Point {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
 pub enum Rotation {
-    North,
+    #[default] North,
     East,
     South,
     West,
-}
-
-impl Default for Rotation {
-    fn default() -> Self {
-        Self::North
-    }
 }
 
 impl Rotation {
@@ -168,6 +162,50 @@ impl Rotation {
         }
     }
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub struct Pose {
+    pub position: Point,
+    pub rotation: Rotation,
+}
+
+impl Pose {
+    pub fn new(position: Point, rotation: Rotation) -> Self {
+        Self { position, rotation }
+    }
+
+    pub fn from_position(position: Point) -> Self {
+        Self { position, rotation: Rotation::default() }
+    }
+
+    pub fn translate(&self, x: i32, y: i32) -> Self {
+        Self {
+            position: self.position.translate(x, y),
+            rotation: self.rotation,
+        }
+    }
+
+    pub fn rotate(&self, clockwise: bool) -> Self {
+        Self {
+            position: self.position,
+            rotation: self.rotation.rotate(clockwise),
+        }
+    }
+
+    pub fn rotate_mut(&mut self, clockwise: bool) -> Rotation {
+        self.rotation = self.rotation.rotate(clockwise);
+        self.rotation
+    }
+}
+
+impl Add<Point> for Pose {
+    type Output = Self;
+
+    fn add(self, rhs: Point) -> Self::Output {
+        Self { position: self.position + rhs, ..self }
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

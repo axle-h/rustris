@@ -131,7 +131,11 @@ TODO
 
 * agent
    * open holes: fill by dropping normally
-   * the lookahead doesnt seem to be doing anything useful given it's cost, drop it
+     1. drop using existing algorithm
+     2. for each ending position, create a queue:
+        1. press left, see if this is still lockable and is a new ending position -> add to the list of results AND add to the queue
+        2. repeat this for for right & rotations
+   * measure blocks on top of holes
 * MLP
    * Maybe the issue is that the fitness function is strictly linear
    * Instead I could build a MLP with inputs

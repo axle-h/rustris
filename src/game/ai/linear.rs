@@ -12,7 +12,8 @@ pub struct LinearCoefficients {
     line_clear: Coefficient,
     tetris_clear: Coefficient,
     max_tetromino_y: Coefficient,
-    pillars: Coefficient
+    pillars: Coefficient,
+    hole_cover: Coefficient,
 }
 
 impl Default for LinearCoefficients {
@@ -26,15 +27,16 @@ impl Default for LinearCoefficients {
             -25.65,
             18.87,
             -4.49,
-            -57.45
+            -57.45,
+            0.0,
         )
     }
 }
 
 impl Display for LinearCoefficients {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[{:.2}, {:.2}, {:.2}, {:.2}, {:.2}, {:.2}, {:.2}, {:.2}, {:.2}]",
-               self.open_holes, self.closed_holes, self.max_stack_height, self.sum_stack_roughness, self.max_stack_roughness, self.line_clear, self.tetris_clear, self.max_tetromino_y, self.pillars)
+        write!(f, "[{:.2}, {:.2}, {:.2}, {:.2}, {:.2}, {:.2}, {:.2}, {:.2}, {:.2}, {:.2}]",
+               self.open_holes, self.closed_holes, self.max_stack_height, self.sum_stack_roughness, self.max_stack_roughness, self.line_clear, self.tetris_clear, self.max_tetromino_y, self.pillars, self.hole_cover)
     }
 }
 
@@ -49,6 +51,7 @@ impl LinearCoefficients {
         tetris_clear: Coefficient::ZERO,
         max_tetromino_y: Coefficient::ZERO,
         pillars: Coefficient::ZERO,
+        hole_cover: Coefficient::ZERO,
     };
 
     pub fn from_f64(
@@ -60,7 +63,8 @@ impl LinearCoefficients {
         line_clear: f64,
         tetris_clear: f64,
         max_tetromino_y: f64,
-        pillars: f64
+        pillars: f64,
+        hole_cover: f64
     ) -> Self {
         Self {
             open_holes: open_holes.into(),
@@ -72,6 +76,7 @@ impl LinearCoefficients {
             tetris_clear: tetris_clear.into(),
             max_tetromino_y: max_tetromino_y.into(),
             pillars: pillars.into(),
+            hole_cover: hole_cover.into(),
         }
     }
 
@@ -84,7 +89,8 @@ impl LinearCoefficients {
         line_clear: i64,
         tetris_clear: i64,
         max_tetromino_y: i64,
-        pillars: i64
+        pillars: i64,
+        hole_cover: i64
     ) -> Self {
         Self {
             open_holes: open_holes.into(),
@@ -96,6 +102,7 @@ impl LinearCoefficients {
             tetris_clear: tetris_clear.into(),
             max_tetromino_y: max_tetromino_y.into(),
             pillars: pillars.into(),
+            hole_cover: hole_cover.into(),
         }
     }
 
@@ -134,6 +141,10 @@ impl LinearCoefficients {
     pub fn pillars(&self) -> Coefficient {
         self.pillars
     }
+
+    pub fn hole_cover(&self) -> Coefficient {
+        self.hole_cover
+    }
 }
 
 impl Into<LinearGenome> for LinearCoefficients {
@@ -149,6 +160,7 @@ impl Into<LinearGenome> for LinearCoefficients {
                 self.tetris_clear,
                 self.max_tetromino_y,
                 self.pillars,
+                self.hole_cover
             ]
         )
     }
@@ -166,6 +178,7 @@ impl From<LinearGenome> for LinearCoefficients {
             tetris_clear,
             max_tetromino_y,
             pillars,
+            hole_cover,
         ] = genome.chromosome();
         Self {
             open_holes,
@@ -177,6 +190,7 @@ impl From<LinearGenome> for LinearCoefficients {
             tetris_clear,
             max_tetromino_y,
             pillars,
+            hole_cover,
         }
     }
 }

@@ -20,6 +20,7 @@ pub enum GameInputKey {
     ReturnToMenu,
     Quit,
     NextTheme,
+    ToggleAi
 }
 
 #[derive(Hash, Clone, Copy, Debug, PartialEq, Eq)]

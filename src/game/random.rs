@@ -152,7 +152,10 @@ pub enum RandomMode {
 
 impl RandomMode {
     pub fn build(self, count: usize, min_garbage_per_hole: u32) -> Vec<RandomTetromino> {
-        let seed: Seed = rand::random();
+        //let seed: Seed = rand::random();
+        let seed: Seed = "28388999049103419828512814109252176149722169860947283559845490233521309909782"
+            .to_string()
+            .into();
         (0..count)
             .map(|_| RandomTetromino::new(self, min_garbage_per_hole, seed))
             .collect()

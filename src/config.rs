@@ -55,6 +55,7 @@ pub struct InputConfig {
     pub pause: GameKey,
     pub quit: GameKey,
     pub next_theme: GameKey,
+    pub toggle_ai: GameKey,
 }
 
 impl InputConfig {
@@ -75,6 +76,7 @@ impl InputConfig {
             (self.quit.into(), GameInputKey::ReturnToMenu),
             (self.pause.into(), GameInputKey::Pause),
             (self.next_theme.into(), GameInputKey::NextTheme),
+            (self.toggle_ai.into(), GameInputKey::ToggleAi),
             (self.player1.move_left.into(), GameInputKey::MoveLeft { player: 1 }),
             (
                 self.player1.move_right.into(),
@@ -219,6 +221,8 @@ impl Default for Config {
                 #[cfg(feature = "retro_handheld")] next_theme: GameKey::RShift,
                 #[cfg(not(feature = "retro_handheld"))] next_theme: GameKey::F2,
                 quit: GameKey::Escape,
+                #[cfg(feature = "retro_handheld")] toggle_ai: GameKey::Home,
+                #[cfg(not(feature = "retro_handheld"))] toggle_ai: GameKey::F3,
             },
             game: GameplayConfig {
                 random_mode: RandomMode::Bag,

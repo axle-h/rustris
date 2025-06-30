@@ -86,23 +86,22 @@ impl Search {
         }
     }
     
-    pub fn search_post_hard_drops(&mut self) {
+    pub fn search_translations_from_current_results(&mut self) {
         let poses_and_inputs: Vec<(Pose, InputSequence)> = self.results
             .values()
             .map(|result| {
-                let hard_dropped_pose = result.board.tetromino().unwrap().pose();
+                let pose = result.board.tetromino().unwrap().pose();
                 let mut inputs = result.inputs.clone();
-                inputs.pop(); // remove the hard drop
-                inputs = inputs + SoftDrop;
-                (hard_dropped_pose, inputs)
+                if inputs.pop_drop().is_some() {
+                    inputs.push(SoftDrop);
+                }
+                (pose, inputs)
             })
             .collect();
 
-        for (hard_dropped_pose, inputs) in poses_and_inputs {
-            self.next_translations(hard_dropped_pose, &inputs);
+        for (pose, inputs) in poses_and_inputs {
+            self.next_translations(pose, &inputs);
         }
-        
-        self.search_after_drop(SoftDrop);
     }
     
     pub fn into_results(self) -> Vec<InputSequenceResult> {
@@ -116,10 +115,14 @@ impl Search {
     fn try_insert_result(&mut self, board: &Board, inputs: &InputSequence) {
         let mut minos = board.tetromino().unwrap().minos();
         minos.sort(); // keying by sorted minos disregards mirrored Poses
-
-        // Only insert if this position hasn't been reached yet or if this sequence is shorter
-        if !self.results.contains_key(&minos) ||
-            self.results[&minos].inputs.len() > inputs.len() {
+        
+        let existing = self.results.get(&minos);
+        let should_set = if let Some(existing) = existing {
+            inputs < &existing.inputs
+        } else {
+            true
+        };
+        if should_set {
             self.results.insert(minos, InputSequenceResult { board: *board, inputs: inputs.clone(), minos });
         }
     }
@@ -145,7 +148,8 @@ impl InputSearch for Board {
         
         let mut search = Search::new(self);
         search.search_after_drop(HardDrop);
-        search.search_post_hard_drops();
+        search.search_translations_from_current_results();
+        search.search_after_drop(SoftDrop);
         search.into_results()
     }
 }
@@ -161,10 +165,10 @@ mod tests {
         let board = Board::new();
         let inputs = board.search_all_inputs(TetrominoShape::I);
 
-        // inputs.iter().for_each(|result| {
-        //     println!("{:?}", result.inputs);
-        //     println!("{}", result.board);
-        // });
+        inputs.iter().for_each(|result| {
+            println!("{:?}", result.inputs);
+            println!("{}", result.board);
+        });
 
         assert_eq!(inputs.len(), 17); // 7 flat positions + 10 upright positions
     }
@@ -175,10 +179,10 @@ mod tests {
         board.set_block((0, 1), BlockState::Stack(TetrominoShape::I, Rotation::North, 0));
         let inputs = board.search_all_inputs(TetrominoShape::I);
 
-        // inputs.iter().for_each(|result| {
-        //     println!("{:?}", result.inputs);
-        //     println!("{}", result.board);
-        // });
+        inputs.iter().for_each(|result| {
+            println!("{:?}", result.inputs);
+            println!("{}", result.board);
+        });
 
         assert_eq!(inputs.len(), 18); // 7 flat positions + 10 upright positions + 1 open hole position
     }

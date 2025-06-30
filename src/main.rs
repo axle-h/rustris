@@ -477,6 +477,7 @@ impl TetrisSdl {
         let mut frame_rate = FrameRate::new();
 
         let mut ai = AiAgent::default();
+        let mut run_ai = false;
         
         loop {
             let delta = frame_rate.update()?;
@@ -515,7 +516,12 @@ impl TetrisSdl {
                     GameInputKey::Hold { player } => {
                         fixture.mut_game(player, |g| g.hold());
                     },
-
+                    GameInputKey::ToggleAi => {
+                        run_ai = !run_ai;
+                        if run_ai {
+                            ai.reset();
+                        }
+                    },
                     GameInputKey::Pause => {
                         if let MatchState::Normal | MatchState::Paused = fixture.state() {
                             if let Some(paused_event) = fixture.toggle_paused() {
@@ -529,12 +535,12 @@ impl TetrisSdl {
                 }
             }
             
-            // TODO
-            fixture.mut_game(1, |g| {
-                ai.act(g);
-                true
-            });
-            
+            if run_ai {
+                fixture.mut_game(1, |g| {
+                    ai.act(g);
+                    true
+                });
+            }
 
             for event in fixture.events().into_iter().chain(meta_events) {
                 match event {
@@ -792,12 +798,11 @@ impl TetrisSdl {
         }
     }
 }
-fn main() -> Result<(), String> {
-    ga_main();
-    Ok(())
+fn main2() -> Result<(), String> {
+    ga_main()
 }
 
-fn main2() -> Result<(), String> {
+fn main() -> Result<(), String> {
     let mut rustris = TetrisSdl::new()?;
     let texture_creator = rustris.canvas.texture_creator();
     let (_, window_height) = rustris.canvas.window().size();

@@ -49,8 +49,8 @@ impl HyperParameters {
 impl Default for HyperParameters {
     fn default() -> Self {
         Self::new(
-            500,
-            0.02,
+            1000,
+            0.005,
             0.5,
             EndGame::NONE,
             usize::MAX,
@@ -208,7 +208,7 @@ pub fn ga_main_linear() -> Result<(), String> {
         fixture,
         mutation,
         HyperParameters::default(),
-        Some(LinearCoefficients::default().into()),
+        None,
         move |&genome| ActionEvaluator::Linear(genome.into())
     ).run();
     
@@ -248,6 +248,7 @@ mod tests {
     use crate::config::Config;
     use crate::game::ai::action_evaluator::ActionEvaluator;
     use crate::game::ai::genetic::{GeneticAlgorithm, HyperParameters};
+    use crate::game::ai::genome::LinearGenome;
     use crate::game::ai::headless_game::{EndGame, HeadlessGameFixture, HeadlessGameOptions};
     use crate::game::ai::mutation::{GenomeMutation, RateLimits};
 
@@ -259,7 +260,7 @@ mod tests {
             HeadlessGameOptions::default(),
             EndGame::of_seconds(2)
         );
-        let mutation: GenomeMutation<9> = GenomeMutation::of_max(RateLimits::default(), RateLimits::default(), 5, 100.into());
+        let mutation = GenomeMutation::of_max(RateLimits::default(), RateLimits::default(), 5, 100.into());
         GeneticAlgorithm::new(
             fixture,
             mutation,

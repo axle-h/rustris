@@ -32,9 +32,7 @@ impl ApplyInputs for Board {
                 }
                 Translation::HardDrop | Translation::SoftDrop => {
                     // no game logic so soft dropping is equivalent to hard dropping
-                    if self.hard_drop().is_none() {
-                        return false;
-                    }
+                    self.hard_drop();
                 }
             }
         }

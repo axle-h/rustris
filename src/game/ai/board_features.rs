@@ -37,7 +37,8 @@ pub struct StackStats {
     max_height: i32,
     sum_roughness: i32,
     max_roughness: i32,
-    pillars: i32
+    pillars: i32,
+    hole_cover: i32,
 }
 
 
@@ -70,6 +71,10 @@ impl StackStats {
     pub fn pillars(&self) -> i32 {
         self.pillars
     }
+
+    pub fn hole_cover(&self) -> i32 {
+        self.hole_cover
+    }
 }
 
 impl Sub<StackStats> for StackStats {
@@ -84,6 +89,7 @@ impl Sub<StackStats> for StackStats {
             sum_roughness: self.sum_roughness - rhs.sum_roughness,
             max_roughness: self.max_roughness - rhs.max_roughness,
             pillars: self.pillars - rhs.pillars,
+            hole_cover: self.hole_cover - rhs.hole_cover,
         }
     }
 }
@@ -98,19 +104,26 @@ impl BoardFeatures for Board {
     fn stack_stats(self: Board) -> StackStats {
         let mut holes: HashSet<Point> = HashSet::new();
         let mut max_heights = [0; BOARD_WIDTH as usize];
+        let mut hole_cover = 0;
 
         for x in 0..BOARD_WIDTH as i32 {
-            let mut in_stack = false;
+            let mut stack_depth = 0;
+            let mut current_hole_cover = 0;
             for y in (0..BOARD_HEIGHT as i32).rev() {
                 let point = Point::new(x, y);
                 if !self.block(point).is_empty() {
-                    if !in_stack {
+                    stack_depth += 1;
+                    if stack_depth == 1 {
+                        // first stack block reached
                         max_heights[x as usize] = y as u32 + 1;
-                        in_stack = true;
                     }
-                } else if in_stack {
+                    current_hole_cover += 1;
+                } else if stack_depth > 0 {
                     holes.insert(point);
+                    hole_cover += current_hole_cover;
+                    current_hole_cover = 0;
                 }
+
             }
         }
 
@@ -181,7 +194,8 @@ impl BoardFeatures for Board {
             max_height: max_height as i32,
             sum_roughness: sum_roughness as i32,
             max_roughness: max_roughness as i32,
-            pillars
+            pillars,
+            hole_cover
         }
     }
     
@@ -229,6 +243,7 @@ mod tests {
         let stats = Board::new().having_stack_at(&[(0, 0)]).stack_stats();
         assert_eq!(stats.closed_holes, 0);
         assert_eq!(stats.open_holes, 0);
+        assert_eq!(stats.hole_cover, 0);
     }
 
     #[test]
@@ -239,6 +254,7 @@ mod tests {
         ]).stack_stats();
         assert_eq!(stats.closed_holes, 1);
         assert_eq!(stats.open_holes, 0);
+        assert_eq!(stats.hole_cover, 1);
     }
 
     #[test]
@@ -249,6 +265,7 @@ mod tests {
         ]).stack_stats();
         assert_eq!(stats.closed_holes, 1);
         assert_eq!(stats.open_holes, 0);
+        assert_eq!(stats.hole_cover, 1);
     }
 
     #[test]
@@ -259,6 +276,7 @@ mod tests {
         ]).stack_stats();
         assert_eq!(stats.closed_holes, 2);
         assert_eq!(stats.open_holes, 0);
+        assert_eq!(stats.hole_cover, 2);
     }
 
     #[test]
@@ -271,6 +289,7 @@ mod tests {
         ]).stack_stats();
         assert_eq!(stats.closed_holes, 2);
         assert_eq!(stats.open_holes, 0);
+        assert_eq!(stats.hole_cover, 2);
     }
 
     #[test]
@@ -281,6 +300,7 @@ mod tests {
         ]).stack_stats();
         assert_eq!(stats.closed_holes, 0);
         assert_eq!(stats.open_holes, 1);
+        assert_eq!(stats.hole_cover, 1);
     }
 
     #[test]
@@ -291,6 +311,7 @@ mod tests {
         ]).stack_stats();
         assert_eq!(stats.closed_holes, 0);
         assert_eq!(stats.open_holes, 2);
+        assert_eq!(stats.hole_cover, 2);
     }
 
     #[test]
@@ -301,6 +322,7 @@ mod tests {
         ]).stack_stats();
         assert_eq!(stats.closed_holes, 0);
         assert_eq!(stats.open_holes, 1);
+        assert_eq!(stats.hole_cover, 1);
     }
 
     #[test]
@@ -311,6 +333,7 @@ mod tests {
         ]).stack_stats();
         assert_eq!(stats.closed_holes, 0);
         assert_eq!(stats.open_holes, 2);
+        assert_eq!(stats.hole_cover, 2);
     }
 
     #[test]
@@ -321,6 +344,7 @@ mod tests {
         ]).stack_stats();
         assert_eq!(stats.closed_holes, 0);
         assert_eq!(stats.open_holes, 7);
+        assert_eq!(stats.hole_cover, 7);
     }
 
     #[test]
@@ -333,6 +357,7 @@ mod tests {
         ]).stack_stats();
         assert_eq!(stats.closed_holes, 6);
         assert_eq!(stats.open_holes, 4);
+        assert_eq!(stats.hole_cover, 16);
     }
 
     #[test]
@@ -386,7 +411,8 @@ mod tests {
                 max_height: 1,
                 sum_roughness: 1,
                 max_roughness: 1,
-                pillars: 0
+                pillars: 0,
+                hole_cover: 0
             }
         );
         assert_eq!(stats.cleared_lines, 1);

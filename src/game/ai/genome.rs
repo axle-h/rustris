@@ -67,6 +67,6 @@ impl<const N: usize> Into<[f64; N]> for Genome<N> {
     }
 }
 
-pub const LINEAR_GENOME_SIZE: usize = 9;
+pub const LINEAR_GENOME_SIZE: usize = 10;
 
 pub type LinearGenome = Genome<LINEAR_GENOME_SIZE>;

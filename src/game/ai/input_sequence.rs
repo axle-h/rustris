@@ -14,9 +14,20 @@ impl InputSequence {
     pub fn from_slice(seq: &[Translation]) -> Self {
         Self(seq.to_vec())
     }
-
-    pub fn after_soft_drop(&self) -> Option<Self> {
-        self.0.iter().position(|&t| t == Translation::SoftDrop).map(|i| Self::from_slice(&self.0[i + 1..]))
+    
+    pub fn split_at_soft_drop(&self) -> (Self, Option<Self>) {
+        if let Some(i) = self.0.iter().position(|&t| t == Translation::SoftDrop) {
+            let before = Self::from_slice(&self.0[..i]);
+            let after = if i + 1 < self.0.len() {
+                Self::from_slice(&self.0[i + 1..])
+            } else {
+                Self::empty()
+            };
+            (before, Some(after))
+        } else {
+            // no soft drop
+            (self.clone(), None)
+        }
     }
 
     pub fn new(sequence: Vec<Translation>) -> Self {
@@ -27,12 +38,30 @@ impl InputSequence {
         &self.0
     }
     
-    pub fn pop(&mut self) -> Option<Translation> {
-        self.0.pop()
+    pub fn pop_drop(&mut self) -> Option<Translation> {
+        if let Some(last) = self.0.last() {
+            if last.is_drop() {
+                // If the last translation is a SoftDrop, we pop it
+                self.0.pop()
+            } else {
+                // If the last translation is not a SoftDrop, we return None
+                None
+            }
+        } else {
+            None
+        }
+    }
+    
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
     
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+    
+    pub fn count_soft_drops(&self) -> usize {
+        self.0.iter().filter(|t| t.is_soft_drop()).count()
     }
     
     pub fn push(&mut self, translation: Translation) {
@@ -135,7 +164,10 @@ impl PartialOrd for InputSequence {
 
 impl Ord for InputSequence {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.0.cmp(&other.0)
+        // consider a sequence with a soft drop "longer" than one without
+        self.count_soft_drops().cmp(&other.count_soft_drops())
+            .then(self.0.len().cmp(&other.0.len()))
+            .then(self.0.cmp(&other.0))
     }
 }
 
@@ -173,6 +205,14 @@ impl Translation {
             Translation::HardDrop | Translation::SoftDrop => panic!("undefined translation for pose"),
         }
     }
+    
+    pub fn is_drop(self) -> bool {
+        matches!(self, Translation::HardDrop | Translation::SoftDrop)
+    }
+    
+    pub fn is_soft_drop(self) -> bool {
+        matches!(self, Translation::SoftDrop)
+    }
 }
 
 impl PartialOrd for Translation {
@@ -189,25 +229,26 @@ impl Ord for Translation {
 
 #[cfg(test)]
 mod tests {
+    use Translation::{Left, Right, RotateAnticlockwise, RotateClockwise, SoftDrop};
     use super::*;
     
     #[test]
     fn rotates_clockwise() {
-        let seq = InputSequence::new(vec![Translation::RotateClockwise, Translation::RotateClockwise]).resolve();
+        let seq = InputSequence::new(vec![RotateClockwise, RotateClockwise]).resolve();
         assert_eq!(seq, ResolvedInputSequence { translate: 0, rotation: Rotation::South });
     }
 
     #[test]
     fn rotates_anticlockwise() {
-        let seq = InputSequence::new(vec![Translation::RotateAnticlockwise, Translation::RotateAnticlockwise]).resolve();
+        let seq = InputSequence::new(vec![RotateAnticlockwise, RotateAnticlockwise]).resolve();
         assert_eq!(seq, ResolvedInputSequence { translate: 0, rotation: Rotation::South });
     }
 
     #[test]
     fn rotates_360() {
         let seq = InputSequence::new(vec![
-            Translation::RotateClockwise, Translation::RotateClockwise,
-            Translation::RotateClockwise, Translation::RotateClockwise
+            RotateClockwise, RotateClockwise,
+            RotateClockwise, RotateClockwise
         ]).resolve();
         
         assert_eq!(seq, ResolvedInputSequence { translate: 0, rotation: Rotation::North });
@@ -215,21 +256,65 @@ mod tests {
 
     #[test]
     fn left() {
-        let seq = InputSequence::new(vec![Translation::Left, Translation::Left]).resolve();
+        let seq = InputSequence::new(vec![Left, Left]).resolve();
         assert_eq!(seq, ResolvedInputSequence { translate: -2, rotation: Rotation::North });
     }
 
     #[test]
     fn right() {
-        let seq = InputSequence::new(vec![Translation::Right, Translation::Right]).resolve();
+        let seq = InputSequence::new(vec![Right, Right]).resolve();
         assert_eq!(seq, ResolvedInputSequence { translate: 2, rotation: Rotation::North });
     }
 
     #[test]
     fn deduplicates_movement() {
         let seq = InputSequence::new(vec![
-            Translation::Left, Translation::Left, Translation::Right
+            Left, Left, Right
         ]).resolve();
         assert_eq!(seq, ResolvedInputSequence { translate: -1, rotation: Rotation::North });
+    }
+
+    #[test]
+    fn split_at_soft_drop_nop() {
+        let seq = InputSequence::new(vec![
+            Left, Left, Right
+        ]);
+
+        let (before, after) = seq.split_at_soft_drop();
+        assert_eq!(before, InputSequence::from_slice(&[Left, Left, Right]));
+        assert_eq!(after, None);
+    }
+
+    #[test]
+    fn split_at_soft_drop_at_end() {
+        let seq = InputSequence::new(vec![
+            Left, Left, Right, SoftDrop
+        ]);
+
+        let (before, after) = seq.split_at_soft_drop();
+        assert_eq!(before, InputSequence::from_slice(&[Left, Left, Right]));
+        assert_eq!(after, Some(InputSequence::empty()));
+    }
+
+    #[test]
+    fn split_at_soft_drop_in_middle() {
+        let seq = InputSequence::new(vec![
+            Left, Left, Right, SoftDrop, RotateClockwise
+        ]);
+
+        let (before, after) = seq.split_at_soft_drop();
+        assert_eq!(before, InputSequence::from_slice(&[Left, Left, Right]));
+        assert_eq!(after, Some(InputSequence::from_slice(&[RotateClockwise])));
+    }
+
+    #[test]
+    fn split_at_soft_drop_multiple_times() {
+        let seq = InputSequence::new(vec![
+            Left, Left, Right, SoftDrop, RotateClockwise, SoftDrop, RotateAnticlockwise, SoftDrop
+        ]);
+
+        let (before, after) = seq.split_at_soft_drop();
+        assert_eq!(before, InputSequence::from_slice(&[Left, Left, Right]));
+        assert_eq!(after, Some(InputSequence::from_slice(&[RotateClockwise, SoftDrop, RotateAnticlockwise, SoftDrop])));
     }
 }

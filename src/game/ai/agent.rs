@@ -14,15 +14,20 @@ use crate::game::tetromino::TetrominoShape;
 
 pub struct AiAgent {
     action_evaluate: ActionEvaluator,
-    wait_for_alt: Option<InputSequence>,
-    wait_for_spawn: bool,
-    wait_for_soft_drop: Option<InputSequence>,
+    wait_sate: Option<AgentWaitState>,
     look_ahead: usize
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum AgentWaitState {
+    Spawn,
+    SoftDrop(InputSequence),
+    Alt(TetrominoShape, InputSequence),
 }
 
 impl AiAgent {
     pub fn new(action_evaluate: ActionEvaluator, look_ahead: usize) -> Self {
-        Self { action_evaluate, wait_for_alt: None, wait_for_spawn: true, wait_for_soft_drop: None, look_ahead }
+        Self { action_evaluate, wait_sate: None, look_ahead }
     }
     
     pub fn default_linear() -> Self {
@@ -33,68 +38,85 @@ impl AiAgent {
         Self::new(ActionEvaluator::NeuralNetwork(TetrisNeuralNetwork::default()), DEFAULT_LOOKAHEAD)
     }
 
+    fn apply_inputs(&mut self, game: &mut Game, inputs: &InputSequence) {
+        let (before_soft_drop, after_soft_drop) = inputs.split_at_soft_drop();
+        game.apply_inputs(&before_soft_drop);
+        
+        if let Some(after_soft_drop) = after_soft_drop {
+            self.wait_sate = Some(AgentWaitState::SoftDrop(after_soft_drop));
+        } else {
+            self.wait_sate = Some(AgentWaitState::Spawn);
+        }
+    }
+    
+    pub fn reset(&mut self) {
+        self.wait_sate = None;
+    }
+    
     pub fn act(&mut self, game: &mut Game) {
-        let next_move = match game.state {
-            GameState::Spawn(_, _) => {
-                self.wait_for_spawn = false;
-                self.wait_for_soft_drop = None;
-                None
-            }
-            GameState::Fall(_) if self.wait_for_spawn => {
-                let _ = game.hard_drop();
-                None
-            }
-            GameState::Fall(_) if self.wait_for_soft_drop.is_some() => {
-                game.set_soft_drop(true);
-                None
-            }
-            GameState::Lock(_) if self.wait_for_soft_drop.is_some() => {
-                let result = self.wait_for_soft_drop.clone();
-                self.wait_for_soft_drop = None;
-                result
-            }
-            GameState::Fall(_) if self.wait_for_alt.is_some() => {
-                let alt = self.wait_for_alt.clone();
-                self.wait_for_alt = None;
-                alt
-            }
-            GameState::Fall(_) => {
-                if let Some(shape) = game.board.tetromino().map(|t| t.shape()) {
-                    let best_result = self.best_move(game, shape, &game.random.peek_buffer());
-
-                    let (alt_next_shape, alt_next_peek) = game.hold
-                        .map(|state| (state.shape, 0..))
-                        .unwrap_or_else(|| (game.random.peek(), 1..));
-
-                    let alt_best_move = self.best_move(game, alt_next_shape, &game.random.peek_buffer()[alt_next_peek]);
-                    let (best_inputs, is_alt) = match (best_result, alt_best_move) {
-                        (None, None) => return,
-                        (Some((m, _)), None) => (m, false),
-                        (None, Some((m, _))) => (m, true),
-                        (Some((m1, c1)), Some((m2, c2))) =>
-                            if c1 < c2 { (m1, false) } else { (m2, true) }
-                    };
-                    if is_alt {
-                        // return and wait for a tetromino
-                        self.wait_for_alt = Some(best_inputs);
-                        game.hold();
-                        None
-                    } else {
-                        Some(best_inputs)
+        if let Some(wait_state) = self.wait_sate.clone() {
+            match wait_state {
+                AgentWaitState::Spawn => {
+                    if matches!(game.state, GameState::Spawn(_, _)) {
+                        self.wait_sate = None;
                     }
-                } else {
-                    None
+                }
+                AgentWaitState::SoftDrop(post_soft_drop_inputs)  => {
+                    match game.state {
+                        GameState::Fall(_) => {
+                            // continue soft dropping until a lock
+                            game.set_soft_drop(true);
+                            return;
+                        }
+                        GameState::Lock(_) => {
+                            // if we are in a lock state, we can apply the soft drop inputs
+                            self.wait_sate = None;
+                            self.apply_inputs(game, &post_soft_drop_inputs);
+                        }
+                        _ => (),
+                    }
+                }
+                AgentWaitState::Alt(alt_shape, alt_inputs) => {
+                    if matches!(game.state, GameState::Fall(_)) {
+                        if let Some(shape) = game.board.tetromino().map(|t| t.shape()) {
+                            if shape == alt_shape {
+                                // we are in the alt state, apply the inputs
+                                self.wait_sate = None;
+                                self.apply_inputs(game, &alt_inputs);
+                            }
+                        }
+                    }
                 }
             }
-            _ => None
-        };
+            return; // wait for wait state to be resolved
+        }
 
-        if let Some(next_move) = next_move {
-            self.wait_for_soft_drop = next_move.after_soft_drop();
-            if self.wait_for_soft_drop.is_none() {
-                self.wait_for_spawn = true;           
+        if !matches!(game.state, GameState::Fall(_)) {
+            return; // only act when in a fall state
+        }
+        
+        if let Some(shape) = game.board.tetromino().map(|t| t.shape()) {
+            let best_result = self.best_move(game, shape, &game.random.peek_buffer());
+
+            let (alt_next_shape, alt_next_peek) = game.hold
+                .map(|state| (state.shape, 0..))
+                .unwrap_or_else(|| (game.random.peek(), 1..));
+
+            let alt_best_move = self.best_move(game, alt_next_shape, &game.random.peek_buffer()[alt_next_peek]);
+            let (best_inputs, is_alt) = match (best_result, alt_best_move) {
+                (None, None) => return,
+                (Some((m, _)), None) => (m, false),
+                (None, Some((m, _))) => (m, true),
+                (Some((m1, c1)), Some((m2, c2))) =>
+                    if c1 < c2 { (m1, false) } else { (m2, true) }
+            };
+            if is_alt {
+                // hold the current and wait for the alt shape to fall
+                self.wait_sate = Some(AgentWaitState::Alt(alt_next_shape, best_inputs));
+                game.hold();
+            } else {
+                self.apply_inputs(game, &best_inputs);
             }
-            game.apply_inputs(&next_move);
         }
     }
     

@@ -45,11 +45,13 @@ impl ActionEvaluator {
             delta.sum_roughness() as f64,
             delta.max_roughness() as f64,
             delta.pillars() as f64,
+            delta.hole_cover() as f64,
             global.holes() as f64,
             global.max_height() as f64,
             global.sum_roughness() as f64,
             global.max_roughness() as f64,
             global.pillars() as f64,
+            global.hole_cover() as f64,
             stats.max_tetromino_y() as f64,
             stats.cleared_lines() as f64,
         ]);

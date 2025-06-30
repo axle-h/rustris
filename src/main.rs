@@ -798,11 +798,11 @@ impl TetrisSdl {
         }
     }
 }
-fn main2() -> Result<(), String> {
+fn main() -> Result<(), String> {
     ga_main()
 }
 
-fn main() -> Result<(), String> {
+fn main2() -> Result<(), String> {
     let mut rustris = TetrisSdl::new()?;
     let texture_creator = rustris.canvas.texture_creator();
     let (_, window_height) = rustris.canvas.window().size();

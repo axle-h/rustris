@@ -140,9 +140,15 @@ impl Search {
 
 impl InputSearch for Board {
     fn search_all_inputs(mut self, shape: TetrominoShape) -> Vec<InputSequenceResult> {
-        self.clear_tetromino();
-        if self.try_spawn_tetromino(shape).is_none() {
-            // cannot even place the tetromino, no possible inputs
+        if let Some(current_shape) = self.tetromino().map(|t| t.shape()) {
+            if current_shape != shape {
+                // searching for a different shape than the current one, e.g. a hold, so clear it
+                self.clear_tetromino();
+            }
+        }
+        
+        if self.tetromino().is_none() && self.try_spawn_tetromino(shape).is_none() {
+            // cannot even spawn the shape, no possible inputs
             return vec![];
         }
         
@@ -185,5 +191,28 @@ mod tests {
         });
 
         assert_eq!(inputs.len(), 18); // 7 flat positions + 10 upright positions + 1 open hole position
+    }
+
+    #[test]
+    fn searches_from_non_spawn_position() {
+        let mut board = Board::new();
+        board.set_block((0, 1), BlockState::Stack(TetrominoShape::I, Rotation::North, 0));
+        
+        board.try_spawn_tetromino(TetrominoShape::L).unwrap();
+        for _ in 0..10 {
+            board.step_down();
+        }
+        board.rotate(true);
+        board.right();
+        board.right();
+        
+        let inputs = board.search_all_inputs(TetrominoShape::L);
+
+        inputs.iter().for_each(|result| {
+            println!("{:?}", result.inputs);
+            println!("{}", result.board);
+        });
+
+        assert_eq!(inputs.len(), 35);
     }
 }

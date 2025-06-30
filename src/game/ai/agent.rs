@@ -41,18 +41,18 @@ impl AiAgent {
     fn apply_inputs(&mut self, game: &mut Game, inputs: &InputSequence) {
         let (before_soft_drop, after_soft_drop) = inputs.split_at_soft_drop();
         game.apply_inputs(&before_soft_drop);
-        
+
         if let Some(after_soft_drop) = after_soft_drop {
             self.wait_sate = Some(AgentWaitState::SoftDrop(after_soft_drop));
         } else {
             self.wait_sate = Some(AgentWaitState::Spawn);
         }
     }
-    
+
     pub fn reset(&mut self) {
         self.wait_sate = None;
     }
-    
+
     pub fn act(&mut self, game: &mut Game) {
         if let Some(wait_state) = self.wait_sate.clone() {
             match wait_state {

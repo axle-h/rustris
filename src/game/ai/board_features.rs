@@ -95,13 +95,13 @@ impl Sub<StackStats> for StackStats {
 }
 
 pub trait BoardFeatures {
-    fn stack_stats(self) -> StackStats;
+    fn stack_stats(&self) -> StackStats;
     fn features_after_action(&self, board_before_action: &Board, stats_before_action: StackStats) -> BoardStats;
 }
 
 
 impl BoardFeatures for Board {
-    fn stack_stats(self: Board) -> StackStats {
+    fn stack_stats(self: &Board) -> StackStats {
         let mut holes: HashSet<Point> = HashSet::new();
         let mut max_heights = [0; BOARD_WIDTH as usize];
         let mut hole_cover = 0;
@@ -111,7 +111,7 @@ impl BoardFeatures for Board {
             let mut current_hole_cover = 0;
             for y in (0..BOARD_HEIGHT as i32).rev() {
                 let point = Point::new(x, y);
-                if !self.block(point).is_empty() {
+                if self.block(point).is_stack() {
                     stack_depth += 1;
                     if stack_depth == 1 {
                         // first stack block reached
@@ -200,13 +200,6 @@ impl BoardFeatures for Board {
     }
     
     fn features_after_action(&self, board_before_action: &Board, stats_before_action: StackStats) -> BoardStats {
-        // get stack stats AFTER the tetromino was locked AND any lines were cleared
-        let mut board = *self;
-        let patterns = board.pattern();
-        let cleared_lines = compact_destroy_lines(patterns).len() as u32;
-        board.destroy(patterns);
-        let global = board.stack_stats();
-
         let mut max_tetromino_y = 0u32;
         for x in 0..BOARD_WIDTH as i32 {
             for y in (0..BOARD_HEIGHT as i32).rev() {
@@ -215,6 +208,13 @@ impl BoardFeatures for Board {
                 }
             }
         }
+
+        // get stack stats AFTER the tetromino was locked AND any lines were cleared
+        let mut board = *self;
+        let patterns = board.pattern();
+        let cleared_lines = compact_destroy_lines(patterns).len() as u32;
+        board.destroy(patterns);
+        let global = board.stack_stats();
         
         BoardStats {
             global,
@@ -229,13 +229,21 @@ impl BoardFeatures for Board {
 mod tests {
     use crate::game::block::BlockState;
     use crate::game::geometry::Rotation;
-    use crate::game::tetromino::{minos_of, TetrominoShape};
+    use crate::game::tetromino::TetrominoShape;
     use super::*;
 
     #[test]
     fn empty_board() {
         let stats = Board::new().features_from_empty();
         assert_eq!(stats, BoardStats::default());
+    }
+
+    #[test]
+    fn ignores_tetromino() {
+        let mut board = Board::new();
+        board.try_spawn_tetromino(TetrominoShape::J);
+        let stats = board.stack_stats();
+        assert_eq!(stats, StackStats::default());
     }
 
     #[test]
